@@ -60,6 +60,7 @@ export function phoneticNormalize(str: string): string {
 // Common grocery product bilingual dictionary aliases
 const productBilingualDict: [string[], string[]][] = [
   [['sugar', 'chini', 'cheeni', 'shakkar'], ['चीनी', 'शक्कर']],
+  [['gur', 'gud', 'jaggery'], ['गुड़', 'गुड']],
   [['oil', 'tel', 'refine', 'refined', 'mustard', 'sarson'], ['तेल', 'सरसों तेल', 'रिफाइंड']],
   [['salt', 'namak'], ['नमक']],
   [['tata salt', 'tata namak'], ['टाटा नमक', 'टाटा साल्ट']],

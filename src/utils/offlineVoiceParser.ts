@@ -177,7 +177,7 @@ export function parseSpokenDukaanVoice(
   const isProductDelete = /(?:सामान|प्रोडक्ट|आइटम)?\s*(?:हटाओ|हटा\s*दो|हटाना|हटाएं|हटा\s*देना|डिलीट\s*करो|डिलीट\s*कर\s*दो|डिलीट|delete|remove)/i.test(clean);
   const isProductInquiry = /(?:कितना\s*स्टॉक|स्टॉक\s*बताओ|स्टॉक\s*कितना|कितना\s*माल|कितना\s*बचा|बचा\s*है|क्या\s*रेट|भाव\s*क्या|रेट\s*बताओ|भाव\s*बताओ|कीमत\s*क्या|how\s*much\s*stock|check\s*stock|price\s*check|check\s*price)/i.test(clean);
   const isProductReduce = /(?:बिका|बिक\s*गया|बेचा|बेच\s*दिया|कम\s*करो|कम\s*कर\s*दो|कम\s*करें|घटाओ|घटा\s*दो|घटाएं|सेल\s*हुआ|सेल\s*हो\s*गया|सेल\s*किया|निकल\s*गया|sold|reduce|deduct)/i.test(clean);
-  const isProductPriceUpdate = /(?:रेट\s*बदलो|भाव\s*बदलो|रेट\s*करो|भाव\s*करो|में\s*बेचेंगे|नया\s*रेट|नया\s*भाव|बिक्री\s*रेट|खरीद\s*रेट|update\s*price|change\s*rate|new\s*rate)/i.test(clean);
+  const isProductPriceUpdate = /(?:रेट\s*बदलो|भाव\s*बदलो|रेट\s*करो|भाव\s*करो|में\s*बेचेंगे|नया\s*रेट|नया\s*भाव|बिक्री\s*रेट|खरीद\s*रेट|update\s*price|change\s*rate|new\s*rate|बिक\s*रहा|bik\s*raha|बिक\s*रही|bik\s*rahi|बिक\s*रहा\s*ह|bik\s*raha\s*h|बिक\s*रही\s*ह|bik\s*rahi\s*h|बिक\s*रहा\s*है|bik\s*raha\s*hai|बिकेगा|bikega|चल\s*रहा|chal\s*raha|भाव\s*है|rate\s*hai|का\s*भाव|का\s*रेट|pr\s*kg|per\s*kg|प्रति\s*किलो|pr\s*ltr|per\s*ltr|प्रति\s*लीटर|pr\s*packet|per\s*packet|में\s*बिक|me\s*bik)/i.test(clean);
   const isProductStockAdd = /(?:स्टॉक\s*में\s*जोड़ो|स्टॉक\s*जोड़ो|स्टॉक\s*बढ़ाओ|माल\s*आया|आया\s*है|नया\s*माल|स्टॉक\s*डालो|add\s*to\s*stock|add\s*stock|restock)/i.test(clean);
 
   const hasInventoryExplicitKeywords = /(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/i.test(clean) ||
@@ -194,7 +194,7 @@ export function parseSpokenDukaanVoice(
 
   // Grocery units and common commodities
   const hasGroceryUnits = /(?:पैकेट|packet|packets|pkt|pkts|किलो|किलोग्राम|kg|kilo|लीटर|ltr|litre|liter|पीस|piece|pieces|pcs|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतल|bottle|डब्बा|डिब्बा|पाउच|ग्राम|gm)/i.test(clean);
-  const hasCommonGroceryWords = /(?:मैगी|maggi|फॉर्च्यून|fortune|आशीर्वाद|ashirvaad|तेल|oil|रिफाइंड|सरसों|आटा|aata|चावल|rice|दाल|daal|चीनी|sugar|शक्कर|बिस्कुट|biscuit|पारले|साबुन|soap|सर्फ|surf|शैम्पू|shampoo|कोलगेट|colgate|पेस्ट|paste|चाय|tea|कॉफी|coffee|मसाला|masala|हल्दी|मिर्च|धनिया|नमक|salt|घी|ghee)/i.test(clean);
+  const hasCommonGroceryWords = /(?:मैगी|maggi|फॉर्च्यून|fortune|आशीर्वाद|ashirvaad|तेल|oil|रिफाइंड|सरसों|आटा|aata|चावल|rice|दाल|daal|चीनी|sugar|शक्कर|गुड़|gur|gud|jaggery|बिस्कुट|biscuit|पारले|साबुन|soap|सर्फ|surf|शैम्पू|shampoo|कोलगेट|colgate|पेस्ट|paste|चाय|tea|कॉफी|coffee|मसाला|masala|हल्दी|मिर्च|धनिया|नमक|salt|घी|ghee)/i.test(clean);
   const hasProductGeneralWords = /(?:सामान|माल|स्टॉक|आइटम|प्रोडक्ट|इन्वेंट्री|item|product|stock|inventory|खरीद|बिक्री|रेट|भाव|mrp)/i.test(clean);
 
   // Intent decision:
@@ -417,15 +417,27 @@ export function parseSpokenDukaanVoice(
 
   // 4.2 Quantity (Stock to add or reduce)
   let quantity = 0;
-  const qtyMatch = clean.match(/(\d+(\.\d+)?)\s*(?:पैकेट|packet|packets|pkt|pkts|किलो|kg|kgs|kilo|लीटर|ltr|litre|liter|पीस|pcs|piece|pieces|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतल|bottle|ग्राम|gm)/i) ||
-                   clean.match(/(?:स्टॉक|स्टॉक में|जोड़ो|जोड़ दो|add|add stock|कम करो|घटाओ|बिका|बेचा)\s*(\d+(\.\d+)?)/i) ||
-                   clean.match(/(\d+(\.\d+)?)\s*(?:स्टॉक|जोड़ो|जोड़ दो|add|in stock|बिका|बेचा|कम|घटाओ)/i);
-  if (qtyMatch && qtyMatch[1]) {
-    quantity = parseFloat(qtyMatch[1]);
-  } else if (productAction === 'reduce_stock' || productAction === 'add_stock') {
-    const bareNums = (clean.match(/\b\d+(\.\d+)?\b/g) || []).map(n => parseFloat(n));
-    if (bareNums.length > 0) {
-      quantity = bareNums[0];
+  // Check if number is actually a price/rate (e.g. ₹60, 60 pr kg, 60 me bik raha)
+  const isRatePattern = /(?:₹|रुपये|रुपया|rupaye|rs\.?)\s*(\d+(\.\d+)?)/i.test(clean) ||
+                        /(\d+(\.\d+)?)\s*(?:₹|रुपये|रुपया|rupaye|rs\.?)/i.test(clean) ||
+                        /(\d+(\.\d+)?)\s*(?:प्रति|pr|per)\s*(?:kg|किलो|लीटर|ltr|पैकेट|pkt|पीस|pcs|बोरी|bori)/i.test(clean) ||
+                        /(?:बिक\s*रहा|bik\s*raha|बिक\s*रही|bik\s*rahi|बिकेगा|bikega|चल\s*रहा|chal\s*raha)/i.test(clean);
+
+  if (productAction === 'update_price') {
+    quantity = 0;
+  } else {
+    const qtyMatch = clean.match(/(\d+(\.\d+)?)\s*(?:पैकेट|packet|packets|pkt|pkts|किलो|kg|kgs|kilo|लीटर|ltr|litre|liter|पीस|pcs|piece|pieces|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतल|bottle|ग्राम|gm)/i) ||
+                     clean.match(/(?:स्टॉक|स्टॉक में|जोड़ो|जोड़ दो|add|add stock|कम करो|घटाओ|बिका|बेचा)\s*(\d+(\.\d+)?)/i) ||
+                     clean.match(/(\d+(\.\d+)?)\s*(?:स्टॉक|जोड़ो|जोड़ दो|add|in stock|बिका|बेचा|कम|घटाओ)/i);
+
+    const currencyAttached = clean.match(/(?:₹|रुपये|रुपया|rupaye|rs\.?)\s*(\d+(\.\d+)?)/i);
+    if (qtyMatch && qtyMatch[1] && (!currencyAttached || parseFloat(currencyAttached[1]) !== parseFloat(qtyMatch[1]))) {
+      quantity = parseFloat(qtyMatch[1]);
+    } else if (productAction === 'reduce_stock' || (productAction === 'add_stock' && !isRatePattern)) {
+      const bareNums = (clean.match(/\b\d+(\.\d+)?\b/g) || []).map(n => parseFloat(n));
+      if (bareNums.length > 0) {
+        quantity = bareNums[0];
+      }
     }
   }
 
@@ -441,10 +453,13 @@ export function parseSpokenDukaanVoice(
 
   const buyMatch = clean.match(/(?:खरीद|kharid|buy|buying|purchase|cost)\s*(?:रेट|मूल्य|भाव|rate|price|at|₹|rs\.?|रुपये)?\s*(\d+(\.\d+)?)/i);
   const sellMatch = clean.match(/(?:बिक्री|bikri|sell|selling|sale|mrp|एमआरपी|बेचेंगे)\s*(?:रेट|मूल्य|भाव|rate|price|at|₹|rs\.?|रुपये)?\s*(\d+(\.\d+)?)/i) ||
-                    clean.match(/(\d+(\.\d+)?)\s*(?:में\s*बेचेंगे|का\s*बिक्री\s*रेट|का\s*रेट)/i);
+                    clean.match(/(?:₹|रुपये|रुपया|rupaye|rs\.?)\s*(\d+(\.\d+)?)/i) ||
+                    clean.match(/(\d+(\.\d+)?)\s*(?:₹|रुपये|रुपया|rupaye|rs\.?)/i) ||
+                    clean.match(/(\d+(\.\d+)?)\s*(?:प्रति|pr|per|में)?\s*(?:किलो|kg|लीटर|ltr|पैकेट|pkt|पीस|pcs|बोरी|bori|दर्जन|dozen)?\s*(?:बिक\s*रहा|bik\s*raha|बिक\s*रही|bik\s*rahi|बिकेगा|bikega|चल\s*रहा|chal\s*raha)/i) ||
+                    clean.match(/(\d+(\.\d+)?)\s*(?:में\s*बेचेंगे|का\s*बिक्री\s*रेट|का\s*रेट|का\s*भाव)/i);
 
   if (buyMatch && buyMatch[1]) purchasePrice = parseFloat(buyMatch[1]);
-  if (sellMatch && sellMatch[1]) sellingPrice = parseFloat(sellMatch[1]);
+  if (sellMatch && (sellMatch[1] || sellMatch[2])) sellingPrice = parseFloat(sellMatch[1] || sellMatch[2]);
 
   if (productAction === 'update_price' && purchasePrice === 0 && sellingPrice === 0) {
     const nums = (clean.match(/\d+(\.\d+)?/g) || []).map(n => parseFloat(n));
@@ -500,18 +515,18 @@ export function parseSpokenDukaanVoice(
     prodName = originalTrimmed
       .replace(/\b\d+(\.\d+)?\b/g, '')
       .replace(/(?:₹|रुपये|रुपया|rupaye|rupee|rupees|rs\.?)/gi, '')
-      .replace(/\b(?:packets|packet|pkts|pkt|kilos|kilo|kg|litres|litre|liters|liter|ltr|pieces|piece|pcs|bori|cartons|carton|peti|dozens|dozen|bottles|bottle|grams|gram|gm)\b/gi, '')
+      .replace(/\b(?:packets|packet|pkts|pkt|kilos|kilo|kgs|kg|litres|litre|liters|liter|ltr|pieces|piece|pcs|pc|bori|cartons|carton|peti|dozens|dozen|bottles|bottle|grams|gram|gm)\b/gi, '')
       .replace(/(?:पैकेटों|पैकेट|किलोग्राम|किलो|लीटरों|लीटर|पीस|बोरी|कार्टन|पेटी|दर्जन|बोतल|ग्राम|डब्बा|डिब्बा|पाउच)/gi, '')
-      .replace(/\b(?:buying|buy|purchase|cost|selling|sale|sell|mrp|price|rate|at)\b/gi, '')
-      .replace(/(?:खरीद|kharid|बिक्री|bikri|एमआरपी|बेचेंगे|रेट|भाव|कीमत)/gi, '')
+      .replace(/\b(?:bik\s*raha\s*hai|bik\s*raha\s*h|bik\s*raha|bik\s*rahi\s*hai|bik\s*rahi\s*h|bik\s*rahi|bik\s*gaya|bika|bikega|bech\s*rahe|bechna\s*hai|bechna|becha|chal\s*raha\s*hai|chal\s*raha\s*h|chal\s*raha|chal\s*rahi|buying|buy|purchase|cost|selling|sale|sell|mrp|price|rate|at)\b/gi, '')
+      .replace(/(?:बिक\s*रहा\s*है|बिक\s*रहा\s*ह|बिक\s*रहा|बिक\s*रही\s*है|बिक\s*रही\s*ह|बिक\s*रही|बिक\s*गया|बिका|बिकेगा|बेच\s*रहे|बेचना\s*है|बेचना|बेचा|चल\s*रहा\s*है|चल\s*रहा\s*ह|चल\s*रहा|चल\s*रही|खरीद|kharid|बिक्री|bikri|एमआरपी|बेचेंगे|रेट|भाव|कीमत)/gi, '')
       .replace(/\b(?:add\s+to\s+stock|add\s+stock|add|update|stock|item|product|new|deduct|reduce|sold|delete|remove)\b/gi, '')
       .replace(/(?:स्टॉक\s*में\s*जोड़ो|स्टॉक\s*जोड़ो|स्टॉक\s*बढ़ाओ|स्टॉक|जोड़ो|जोड़\s*दो|ऐड\s*करो|करो|कर\s*देना|डालो|डाल\s*दो|नया|सामान|प्रोडक्ट|आइटम)/gi, '')
       .replace(/(?:बिका|बिक\s*गया|बेचा|बेच\s*दिया|कम\s*करो|कम\s*कर\s*दो|कम\s*करें|घटाओ|घटा\s*दो|घटाएं|सेल\s*हुआ|सेल\s*हो\s*गया|सेल\s*किया|निकल\s*गया)/gi, '')
       .replace(/(?:कितना\s*स्टॉक|स्टॉक\s*बताओ|स्टॉक\s*कितना|कितना\s*माल|कितना\s*बचा|बचा\s*है|क्या\s*रेट|भाव\s*क्या|रेट\s*बताओ|भाव\s*बताओ|कीमत\s*क्या)/gi, '')
       .replace(/(?:हटाओ|हटा\s*दो|हटाना|हटाएं|डिलीट|हटा\s*देना)/gi, '')
-      .replace(/\b(?:of|in|to|the|and|for|is|are|how|much|what)\b/gi, '')
-      .replace(/(?:में|का|की|के|और|है|था|को|पर|बताओ|कितना|क्या)/gi, '')
-      .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'₹?।]/g, ' ')
+      .replace(/\b(?:pr|per|par|pe|me|mein|se|ko|ka|ki|ke|hai|h|tha|thi|he|is|are|how|much|what|of|in|to|the|and|for)\b/gi, '')
+      .replace(/(?:प्रति|पर|पे|में|से|को|का|की|के|है|ह|था|थी|और|या|बताओ|कितना|क्या|वाला|वाले|वाली)/gi, '')
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'₹?।\\|]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
 
@@ -536,8 +551,8 @@ export function parseSpokenDukaanVoice(
   // 4.5 Auto Category
   let category = matchedProd?.category || 'किराना';
   if (/तेल|रिफाइंड|सरसों|घी|डालडा|oil|ghee/i.test(prodName)) category = 'खाद्य तेल व घी';
-  else if (/चीनी|गुड़|शक्कर|मीठा|sugar/i.test(prodName)) category = 'चीनी व गुड़';
-  else if (/आटा|चावल|दाल|चना|मैदा|सूजी|बेसन|flour|rice|pulse|wheat/i.test(prodName)) category = 'अनाज व दालें';
+  else if (/चीनी|गुड़|शक्कर|मीठा|sugar|gur|gud|jaggery/i.test(prodName)) category = 'चीनी व गुड़';
+  else if (/आटा|चावल|दाल|चना|मैदा|सूजी|बेसन|flour|rice|pulse|wheat|atta|aata/i.test(prodName)) category = 'अनाज व दालें';
   else if (/मसाला|मिर्च|हल्दी|धनिया|जीरा|नमक|spice|salt/i.test(prodName)) category = 'मसाले';
   else if (/साबुन|सर्फ|शैम्पू|पेस्ट|ब्रश|डिटर्जेंट|कोलगेट|soap|shampoo|paste/i.test(prodName)) category = 'प्रसाधन व सफाई';
   else if (/बिस्कुट|मैगी|नूडल्स|नमकीन|चिप्स|चॉकलेट|biscuit|maggi|chips/i.test(prodName)) category = 'स्नैक्स व बिस्कुट';
