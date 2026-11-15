@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, X, Sparkles, Check, ArrowRight, RefreshCw, ShoppingBag, BookOpen, AlertCircle, Camera, Trash2, ZoomIn, Edit3, ArrowUpRight, ArrowDownLeft, Keyboard, Clock, PlusCircle, Zap, PauseCircle } from 'lucide-react';
+import { Mic, MicOff, X, Sparkles, Check, ArrowRight, RefreshCw, ShoppingBag, BookOpen, AlertCircle, Camera, Trash2, ZoomIn, Edit3, ArrowUpRight, ArrowDownLeft, Keyboard, Clock, PlusCircle, Zap, PauseCircle, RotateCcw } from 'lucide-react';
 import { VoiceParseResult, Customer, Product } from '../types';
 import { createSpeechRecognizer, isSpeechRecognitionSupported, playSoundboxVoice, formatCurrency, playMicChime, requestMicrophoneAccess } from '../utils/speech';
 import { parseSpokenDukaanVoice } from '../utils/offlineVoiceParser';
@@ -54,6 +54,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
   const [billImage, setBillImage] = useState<string | null>(null);
   const [viewBillPreview, setViewBillPreview] = useState(false);
+  const [showAdvancedEdit, setShowAdvancedEdit] = useState(false);
 
   // Editable fields in preview
   const [editCustomerName, setEditCustomerName] = useState('');
@@ -205,7 +206,22 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   };
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      // ⚡ As requested: Immediately start listening on voice assistant button click!
+      setInputMode('voice');
+      setShowAdvancedEdit(false);
+      setParsedData(null);
+      setTranscript('');
+      setManualText('');
+      setErrorMsg(null);
+      setSuccessSaved(false);
+      setBillImage(null);
+
+      const timer = setTimeout(() => {
+        startListening();
+      }, 50);
+      return () => clearTimeout(timer);
+    } else {
       stopListening();
       clearAutoSaveCountdown();
       setTranscript('');
@@ -214,8 +230,25 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
       setErrorMsg(null);
       setSuccessSaved(false);
       setBillImage(null);
+      setShowAdvancedEdit(false);
     }
   }, [isOpen]);
+
+  const handleSpeakAgain = () => {
+    clearAutoSaveCountdown();
+    setParsedData(null);
+    setTranscript('');
+    setManualText('');
+    setErrorMsg(null);
+    setShowAdvancedEdit(false);
+    startListening();
+  };
+
+  const handleCancel = () => {
+    stopListening();
+    clearAutoSaveCountdown();
+    onClose();
+  };
 
   const handleProcessSpeech = async (textToProcess: string) => {
     const raw = textToProcess.trim();
@@ -460,7 +493,9 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
         {/* Content */}
         <div className="p-5 flex-1 overflow-y-auto space-y-4">
-          {/* Top Switcher: 🎙️ बोलकर vs ⌨️ लिखकर */}
+          {!parsedData && !successSaved && (
+            <>
+              {/* Top Switcher: 🎙️ बोलकर vs ⌨️ लिखकर */}
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-extrabold">
             <button
               type="button"
@@ -689,6 +724,8 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
               <span>{isEn ? 'Saving entry...' : 'विवरण सेव हो रहा है...'}</span>
             </div>
           )}
+          </>
+          )}
 
           {/* Success Check */}
           {successSaved && (
@@ -703,53 +740,45 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
           {/* EDITABLE PARSED RESULT CARD */}
           {parsedData && !successSaved && (
-            <div className="p-4 rounded-2xl bg-slate-100/95 dark:bg-slate-800/95 border border-slate-300/80 dark:border-slate-700 shadow-md space-y-3.5 animate-in zoom-in-95">
-              {/* Header with 1-click Intent Switcher */}
-              <div className="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5 uppercase tracking-wide">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{isEn ? 'Detected Entry:' : 'सिस्टम ने समझा:'}</span>
-                  </span>
-                  <span className="text-[10px] text-teal-800 dark:text-emerald-300 font-bold bg-teal-100 dark:bg-slate-700/90 px-2 py-0.5 rounded-full flex items-center gap-1 border border-teal-200 dark:border-slate-600">
-                    <Edit3 className="w-3 h-3" />
-                    <span>{isEn ? 'Editable' : 'बदल सकते हैं'}</span>
-                  </span>
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-100/95 dark:bg-slate-800/95 border border-slate-300/80 dark:border-slate-700 shadow-md space-y-3.5 animate-in zoom-in-95">
+              {/* 1. Header Banner showing Confirmation Type */}
+              <div className={`p-3.5 sm:p-4 rounded-2xl border shadow-xs flex items-center justify-between ${
+                parsedData.intent === 'transaction'
+                  ? editType === 'jama'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100'
+                    : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100'
+                  : 'bg-teal-50 dark:bg-teal-950/40 border-teal-300 dark:border-teal-800 text-teal-900 dark:text-teal-100'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${
+                    parsedData.intent === 'transaction'
+                      ? editType === 'jama' ? 'bg-emerald-600' : 'bg-rose-600'
+                      : 'bg-teal-600'
+                  }`}>
+                    {parsedData.intent === 'transaction'
+                      ? (editType === 'jama' ? <ArrowDownLeft className="w-6 h-6 sm:w-7 sm:h-7" /> : <ArrowUpRight className="w-6 h-6 sm:w-7 sm:h-7" />)
+                      : <ShoppingBag className="w-6 h-6 sm:w-7 sm:h-7" />
+                    }
+                  </div>
+                  <div>
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider opacity-80 block">
+                      {isEn ? 'Confirmation Required' : 'कृपया पुष्टि करें (Confirmation)'}
+                    </span>
+                    <h3 className="text-base sm:text-lg font-black leading-tight">
+                      {parsedData.intent === 'transaction'
+                        ? (editType === 'jama' ? (isEn ? 'Payment Received (Jama)' : '🟢 जमा राशि पुष्टि') : (isEn ? 'Credit Given (Udhaar)' : '🔴 उधार खाता पुष्टि'))
+                        : (isEn ? 'Product Stock Entry' : '📦 दुकान सामान / स्टॉक पुष्टि')
+                      }
+                    </h3>
+                  </div>
                 </div>
 
-                {/* Intent Type Toggle (1-Tap Switch between Customer Khata vs Store Product) */}
-                <div className="flex bg-slate-200 dark:bg-slate-900 p-1 rounded-xl text-xs font-black border border-slate-300 dark:border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearAutoSaveCountdown();
-                      setParsedData(prev => prev ? { ...prev, intent: 'transaction' } : null);
-                    }}
-                    className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      parsedData.intent === 'transaction'
-                        ? 'bg-emerald-600 text-white shadow-xs font-black'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>{isEn ? 'Customer Ledger (Udhaar/Jama)' : '👤 ग्राहक खाता (उधार / जमा)'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearAutoSaveCountdown();
-                      setParsedData(prev => prev ? { ...prev, intent: 'product' } : null);
-                    }}
-                    className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                      parsedData.intent === 'product'
-                        ? 'bg-teal-600 text-white shadow-xs font-black'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                    }`}
-                  >
-                    <ShoppingBag className="w-3.5 h-3.5" />
-                    <span>{isEn ? 'Store Product (Inventory)' : '📦 दुकान सामान (Product)'}</span>
-                  </button>
-                </div>
+                {transcript && (
+                  <div className="hidden sm:block text-right max-w-48">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isEn ? 'Heard Voice:' : 'सुना गया:'}</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block">"{transcript}"</span>
+                  </div>
+                )}
               </div>
 
               {/* ⚡ SMART AUTO-COMPLETE COUNTDOWN BANNER */}
@@ -773,7 +802,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   <div className="w-full bg-black/20 h-1.5 rounded-full overflow-hidden">
                     <div
                       className="bg-slate-950 h-full rounded-full transition-all duration-1000 ease-linear"
-                      style={{ width: `${(countdown / 2) * 100}%` }}
+                      style={{ width: `${(countdown / 4) * 100}%` }}
                     />
                   </div>
 
@@ -789,6 +818,127 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* 2. High-Impact Highlights Card */}
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
+                {parsedData.intent === 'transaction' ? (
+                  <>
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">{isEn ? 'Customer Name' : 'ग्राहक का नाम'}</span>
+                        <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                          <span>👤</span>
+                          <span>{editCustomerName}</span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">{isEn ? 'Amount' : 'रुपये / राशि'}</span>
+                        <p className={`text-2xl sm:text-3xl font-black tracking-tight ${
+                          editType === 'jama' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                        }`}>
+                          ₹{editAmount || '0'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-bold">{isEn ? 'Type:' : 'प्रकार:'}</span>
+                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[11px] ${
+                          editType === 'jama' ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300' : 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300'
+                        }`}>
+                          {editType === 'jama' ? (isEn ? 'Payment (+)' : '🟢 जमा (+)') : (isEn ? 'Udhaar (-)' : '🔴 उधार (-)')}
+                        </span>
+                      </span>
+                      {editNotes && (
+                        <span className="truncate max-w-xs text-slate-500 dark:text-slate-400 font-medium">
+                          📝 {editNotes}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">{isEn ? 'Product Name' : 'सामान / प्रोडक्ट'}</span>
+                        <p className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                          <span>📦</span>
+                          <span>{editProductName}</span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">{isEn ? 'Stock Quantity' : 'स्टॉक मात्रा'}</span>
+                        <p className="text-xl sm:text-2xl font-black text-teal-600 dark:text-teal-400">
+                          {editQuantity} {editUnit}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        <span className="text-slate-500 dark:text-slate-400 font-bold block text-[10px]">{isEn ? 'Purchase Rate' : 'खरीद रेट'}</span>
+                        <span className="font-black text-slate-900 dark:text-slate-100 text-sm">₹{editPurchasePrice} / {editUnit}</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                        <span className="text-emerald-700 dark:text-emerald-400 font-bold block text-[10px]">{isEn ? 'Selling Rate' : 'बिक्री रेट'}</span>
+                        <span className="font-black text-emerald-800 dark:text-emerald-300 text-sm">₹{editSellingPrice} / {editUnit}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* 3. Detailed Editing Form (Visible when user taps 'बदलें / सुधारें') */}
+              {showAdvancedEdit && (
+                <div className="p-3.5 rounded-2xl bg-slate-200/60 dark:bg-slate-900/60 border border-slate-300 dark:border-slate-700 space-y-3 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between border-b border-slate-300 dark:border-slate-700 pb-2">
+                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 flex items-center gap-1 uppercase">
+                      <Edit3 className="w-3.5 h-3.5 text-teal-600" />
+                      <span>{isEn ? 'Edit Fields:' : 'विवरण सुधारें / बदलें:'}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedEdit(false)}
+                      className="text-[10px] text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-bold"
+                    >
+                      {isEn ? 'Collapse' : 'समेटें 🔼'}
+                    </button>
+                  </div>
+
+                  {/* Intent Type Toggle (1-Tap Switch between Customer Khata vs Store Product) */}
+                  <div className="flex bg-slate-200 dark:bg-slate-900 p-1 rounded-xl text-xs font-black border border-slate-300 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setParsedData(prev => prev ? { ...prev, intent: 'transaction' } : null);
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        parsedData.intent === 'transaction'
+                          ? 'bg-emerald-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>{isEn ? 'Customer Ledger (Udhaar/Jama)' : '👤 ग्राहक खाता (उधार / जमा)'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setParsedData(prev => prev ? { ...prev, intent: 'product' } : null);
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        parsedData.intent === 'product'
+                          ? 'bg-teal-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>{isEn ? 'Store Product (Inventory)' : '📦 दुकान सामान (Product)'}</span>
+                    </button>
+                  </div>
 
               {parsedData.intent === 'transaction' ? (
                 <div className="space-y-3">
@@ -1223,25 +1373,64 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   <p>{parsedData.suggestion || (isEn ? 'Please speak again or type details below.' : 'कृपया दोबारा बोलें या लिखकर विवरण भरें।')}</p>
                 </div>
               )}
+              </div>
+              )}
 
-              {/* PRIMARY ACTION BUTTON */}
+              {/* PRIMARY ACTION BUTTONS */}
               {parsedData.intent !== 'unknown' && parsedData.intent !== 'mandi_alert' && (
-                <button
-                  onClick={handleConfirmSave}
-                  disabled={isProcessing}
-                  className={`w-full mt-2 py-3 px-4 rounded-xl text-white font-black text-sm shadow-md flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer ${
-                    parsedData.intent === 'transaction'
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 shadow-emerald-900/30'
-                      : 'bg-gradient-to-r from-teal-600 to-cyan-700 hover:from-teal-700 hover:to-cyan-800 shadow-teal-900/30'
-                  }`}
-                >
-                  <Check className="w-4 h-4" />
-                  <span>
-                    {parsedData.intent === 'transaction'
-                      ? (isEn ? 'Confirm & Save to Khata' : 'पुष्टि करें व खाते में दर्ज करें ⚡')
-                      : (isEn ? 'Confirm & Save Product' : 'पुष्टि करें व सामान/स्टॉक सेव करें ⚡')}
-                  </span>
-                </button>
+                <div className="space-y-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleConfirmSave}
+                    disabled={isProcessing}
+                    className={`w-full py-3.5 px-5 rounded-2xl text-white font-black text-sm sm:text-base shadow-lg flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer ${
+                      parsedData.intent === 'transaction'
+                        ? editType === 'jama'
+                          ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 shadow-emerald-900/30'
+                          : 'bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 shadow-rose-900/30'
+                        : 'bg-gradient-to-r from-teal-600 to-cyan-700 hover:from-teal-700 hover:to-cyan-800 shadow-teal-900/30'
+                    }`}
+                  >
+                    <Check className="w-5 h-5 stroke-[3]" />
+                    <span>
+                      {parsedData.intent === 'transaction'
+                        ? (editType === 'jama' ? (isEn ? 'Confirm & Record Payment ⚡' : 'हाँ, सही है — जमा दर्ज करें ⚡') : (isEn ? 'Confirm & Record Udhaar ⚡' : 'हाँ, सही है — उधार दर्ज करें ⚡'))
+                        : (isEn ? 'Confirm & Save Stock ⚡' : 'हाँ, सही है — स्टॉक सेव करें ⚡')}
+                    </span>
+                  </button>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setShowAdvancedEdit(prev => !prev);
+                      }}
+                      className="py-2.5 px-2 rounded-xl bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>{showAdvancedEdit ? (isEn ? 'Hide' : 'छुपाएं') : (isEn ? 'Edit' : 'सुधारें ✏️')}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSpeakAgain}
+                      className="py-2.5 px-2 rounded-xl bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <span>{isEn ? 'Speak Again' : 'दोबारा बोलें 🎙️'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="py-2.5 px-2 rounded-xl bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>{isEn ? 'Cancel' : 'रद्द करें'}</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )}
