@@ -419,11 +419,16 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-extrabold text-base leading-tight truncate">
-                {isEn ? 'Fast Voice Assistant' : 'सुपरफास्ट वॉइस असिस्टेंट'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-base leading-tight truncate">
+                  {isEn ? 'Fast Voice Assistant' : 'सुपरफास्ट वॉइस असिस्टेंट'}
+                </h3>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-400/20 text-emerald-200 border border-emerald-400/30">
+                  FREE Web Speech API
+                </span>
+              </div>
               <p className="text-xs text-teal-100 truncate font-medium">
-                {isEn ? 'Speak naturally to record Udhaar, Jama or Products' : 'बोलिए और एंट्री तुरंत पूरी हो जाएगी'}
+                {isEn ? '100% Free Browser Speech Recognition (No API keys needed)' : '100% मुफ़्त ब्राउज़र वेब स्पीच API (किसी पेड API की जरूरत नहीं)'}
               </p>
             </div>
           </div>
