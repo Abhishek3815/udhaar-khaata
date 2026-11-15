@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, X, Sparkles, Check, ArrowRight, RefreshCw, ShoppingBag, BookOpen, AlertCircle, Camera, Trash2, ZoomIn, Edit3, ArrowUpRight, ArrowDownLeft, Keyboard, Clock, PlusCircle } from 'lucide-react';
+import { Mic, MicOff, X, Sparkles, Check, ArrowRight, RefreshCw, ShoppingBag, BookOpen, AlertCircle, Camera, Trash2, ZoomIn, Edit3, ArrowUpRight, ArrowDownLeft, Keyboard, Clock, PlusCircle, Zap, PauseCircle } from 'lucide-react';
 import { VoiceParseResult, Customer, Product } from '../types';
 import { createSpeechRecognizer, isSpeechRecognitionSupported, playSoundboxVoice, formatCurrency, playMicChime, requestMicrophoneAccess } from '../utils/speech';
 import { parseSpokenDukaanVoice } from '../utils/offlineVoiceParser';
@@ -40,6 +40,14 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   const [successSaved, setSuccessSaved] = useState(false);
   const [lang, setLang] = useState<'hi-IN' | 'en-IN'>(() => (appLang === 'en' ? 'en-IN' : 'hi-IN'));
 
+  // ⚡ Smart Auto-Complete (Saves task in 2s if shopkeeper doesn't touch anything)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('dukaan_voice_autosave') !== 'false';
+  });
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownTimerRef = useRef<any>(null);
+
   useEffect(() => {
     setLang(appLang === 'en' ? 'en-IN' : 'hi-IN');
   }, [appLang]);
@@ -60,13 +68,26 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   const [editUnit, setEditUnit] = useState('पैकेट');
   const [editQuantity, setEditQuantity] = useState('10');
 
-  // Conversational Confirmation State
-  const [isAwaitingConfirmation, setIsAwaitingConfirmation] = useState(false);
-  const awaitingRef = useRef(false);
-  const handleConfirmSaveRef = useRef<() => Promise<void>>(async () => {});
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognizerRef = useRef<any>(null);
+  const handleConfirmSaveRef = useRef<() => Promise<void>>(async () => {});
+
+  const clearAutoSaveCountdown = () => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setCountdown(null);
+  };
+
+  const handleToggleAutoSave = () => {
+    setAutoSaveEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('dukaan_voice_autosave', String(next));
+      if (!next) clearAutoSaveCountdown();
+      return next;
+    });
+  };
 
   // Suggested Voice / Text Prompts covering both Khata & Products
   const quickPrompts = [
@@ -84,6 +105,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
     try {
       const compressed = await compressImageFile(file, 1200, 0.75);
       setBillImage(compressed);
+      clearAutoSaveCountdown();
     } catch (err) {
       console.error('Image compression failed:', err);
       alert('फ़ोटो लोड करने में विफल रहा');
@@ -102,83 +124,12 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
     setIsListening(false);
   };
 
-  const handleConfirmationSpeech = async (spokenText: string) => {
-    const clean = spokenText.toLowerCase().trim();
-
-    // Check negative / cancel first
-    const isNo = /(?:नहीं|ना|no|nah|cancel|रद्द|रद्द करो|मत करो|कैंसिल|stop|abort|don't save|dont save)/i.test(clean);
-    if (isNo) {
-      stopListening();
-      setIsAwaitingConfirmation(false);
-      awaitingRef.current = false;
-      playMicChime('error');
-      const cancelMsg = isEn ? 'Cancelled. You can edit the details below.' : 'रद्द कर दिया गया। आप नीचे सुधार कर सकते हैं।';
-      playSoundboxVoice(cancelMsg, soundboxEnabled);
-      return;
-    }
-
-    // Check affirmative / save
-    const isYes = /(?:हाँ|हां|ha+|haan|yes|yep|yeah|yup|kar do|save karo|save|confirm|ok|okay|theek hai|proceed|done|कर दो|सेव करो|सेव कर दो|सेव|कन्फर्म|कन्फर्म करो|कन्फर्म है|ठीक है|सही है)/i.test(clean);
-    if (isYes) {
-      stopListening();
-      setIsAwaitingConfirmation(false);
-      awaitingRef.current = false;
-      playMicChime('success');
-      await handleConfirmSaveRef.current();
-      return;
-    }
-
-    // If spoken something substantial (>3 chars) that is not simple confirmation, assume shopkeeper wants to re-speak a new entry
-    if (clean.length > 3) {
-      setIsAwaitingConfirmation(false);
-      awaitingRef.current = false;
-      handleProcessSpeech(spokenText);
-    }
-  };
-
-  const startConfirmationListening = async () => {
-    if (!isSpeechRecognitionSupported()) return;
-    stopListening();
-    setIsAwaitingConfirmation(true);
-    awaitingRef.current = true;
-    playMicChime('start');
-
-    try {
-      const recognizer = createSpeechRecognizer(
-        (text, isFinal) => {
-          setTranscript(text);
-          if (isFinal && text.trim().length > 0) {
-            handleConfirmationSpeech(text);
-          }
-        },
-        (error) => {
-          console.warn('[Speech] Confirmation error:', error);
-          setIsListening(false);
-        },
-        () => {
-          setIsListening(false);
-        },
-        lang
-      );
-
-      recognizerRef.current = recognizer;
-      if (recognizer) {
-        recognizer.start();
-        setIsListening(true);
-      }
-    } catch (e: any) {
-      console.warn('Confirmation speech start error:', e);
-      setIsListening(false);
-    }
-  };
-
   const startListening = async (overrideLang?: 'hi-IN' | 'en-IN') => {
+    clearAutoSaveCountdown();
     setErrorMsg(null);
     setSuccessSaved(false);
     setTranscript('');
     setParsedData(null);
-    setIsAwaitingConfirmation(false);
-    awaitingRef.current = false;
 
     const activeLang = overrideLang || lang;
 
@@ -199,11 +150,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
         (text, isFinal) => {
           setTranscript(text);
           if (isFinal && text.trim().length > 0) {
-            if (awaitingRef.current) {
-              handleConfirmationSpeech(text);
-            } else if (text.trim().length > 1) {
-              handleProcessSpeech(text);
-            }
+            handleProcessSpeech(text);
           }
         },
         (error) => {
@@ -260,6 +207,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       stopListening();
+      clearAutoSaveCountdown();
       setTranscript('');
       setManualText('');
       setParsedData(null);
@@ -270,72 +218,107 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   }, [isOpen]);
 
   const handleProcessSpeech = async (textToProcess: string) => {
-    if (!textToProcess.trim()) return;
+    const raw = textToProcess.trim();
+    if (!raw) return;
+
+    clearAutoSaveCountdown();
+
+    // Check if user is confirming or aborting an open card
+    const cleanLower = raw.toLowerCase();
+    const isYes = /(?:हाँ|हां|ha+|haan|yes|yep|yeah|yup|kar do|save karo|save|confirm|ok|okay|theek hai|proceed|done|कर दो|सेव करो|सेव कर दो|सेव|कन्फर्म|कन्फर्म करो|कन्फर्म है|ठीक है|सही है)/i.test(cleanLower);
+    const isNo = /(?:नहीं|ना|no|nah|cancel|रद्द|रद्द करो|मत करो|कैंसिल|stop|abort|don't save|dont save)/i.test(cleanLower);
+
+    if (parsedData && isYes) {
+      stopListening();
+      playMicChime('success');
+      await handleConfirmSaveRef.current();
+      return;
+    }
+    if (parsedData && isNo) {
+      stopListening();
+      clearAutoSaveCountdown();
+      playMicChime('error');
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMsg(null);
 
     try {
-      let resultData: VoiceParseResult | null = null;
+      // ⚡ 1. INSTANT LOCAL CLIENT PARSER (0ms delay, 100% offline & real-time)
+      let resultData: VoiceParseResult | null = parseSpokenDukaanVoice(raw, customers, products);
 
-      // 1. Try server AI / PHP endpoint first
-      try {
-        const res = await fetch('/api/ai/parse-voice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ speechText: textToProcess })
-        });
-        const data = await res.json();
-        if (data.success && data.data && data.data.intent !== 'unknown') {
-          resultData = data.data;
-        }
-      } catch {
-        // network or server error - fallback to local parser below
-      }
-
-      // 2. Client-side smart parser fallback (100% reliable offline & instant)
-      if (!resultData || resultData.intent === 'unknown') {
-        const localParsed = parseSpokenDukaanVoice(textToProcess, customers, products);
-        if (localParsed) {
-          resultData = localParsed;
+      // 2. If client parser was unsure, try server endpoint as secondary enhancement
+      if (!resultData || resultData.intent === 'unknown' || (resultData.intent === 'transaction' && !resultData.amount)) {
+        try {
+          const res = await fetch('/api/ai/parse-voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ speechText: raw })
+          });
+          const data = await res.json();
+          if (data.success && data.data && data.data.intent !== 'unknown') {
+            resultData = data.data;
+          }
+        } catch {
+          // ignore server network error
         }
       }
 
-      if (resultData) {
+      if (resultData && resultData.intent !== 'unknown') {
         setParsedData(resultData);
+        playMicChime('success');
 
-        // Pre-fill editable states so shopkeeper can easily verify and change anything!
+        // Pre-fill editable states
         if (resultData.intent === 'transaction') {
-          setEditCustomerName(resultData.customerName || 'नया ग्राहक');
-          setEditAmount(resultData.amount ? String(resultData.amount) : '100');
+          const matchedName = resultData.customerName || 'नया ग्राहक';
+          const amt = resultData.amount ? String(resultData.amount) : '';
+          setEditCustomerName(matchedName);
+          setEditAmount(amt);
           setEditType(resultData.type || 'udhaar');
           setEditNotes(resultData.notes || (resultData.type === 'udhaar' ? 'उधार माल' : 'जमा राशि'));
           setEditCreditPeriodDays(resultData.creditPeriodDays || resultData.customer?.credit_period_days || 15);
+
+          // ⚡ Start 2-second Auto-Save Countdown if amount is recognized
+          if (autoSaveEnabled && Number(amt) > 0) {
+            setCountdown(2);
+            countdownTimerRef.current = setInterval(() => {
+              setCountdown(prev => {
+                if (prev === null) return null;
+                if (prev <= 1) {
+                  clearInterval(countdownTimerRef.current);
+                  countdownTimerRef.current = null;
+                  handleConfirmSaveRef.current();
+                  return null;
+                }
+                return prev - 1;
+              });
+            }, 1000);
+          }
         } else if (resultData.intent === 'product') {
-          setEditProductName(resultData.name || resultData.productName || 'नया सामान');
+          const pName = resultData.name || resultData.productName || 'नया सामान';
+          setEditProductName(pName);
           setEditPurchasePrice(resultData.purchasePrice ? String(resultData.purchasePrice) : '50');
           setEditSellingPrice(resultData.sellingPrice ? String(resultData.sellingPrice) : '60');
           setEditQuantity(resultData.quantity ? String(resultData.quantity) : '10');
           setEditUnit(resultData.unit || 'पैकेट');
-        }
 
-        // Soundbox conversational prompt & confirmation listening
-        if (resultData.confirmationSpeech) {
-          setIsAwaitingConfirmation(true);
-          awaitingRef.current = true;
-          if (soundboxEnabled) {
-            playSoundboxVoice(resultData.confirmationSpeech, true, () => {
-              // Once assistant finishes speaking question, start listening for "हाँ" or "Yes"
-              startConfirmationListening();
-            }, { skipChime: true });
-          } else {
-            // If soundbox is muted, still activate listening for confirmation after brief pause
-            setTimeout(() => {
-              startConfirmationListening();
-            }, 600);
+          // ⚡ Start 2-second Auto-Save Countdown for product
+          if (autoSaveEnabled && pName && pName !== 'नया सामान') {
+            setCountdown(2);
+            countdownTimerRef.current = setInterval(() => {
+              setCountdown(prev => {
+                if (prev === null) return null;
+                if (prev <= 1) {
+                  clearInterval(countdownTimerRef.current);
+                  countdownTimerRef.current = null;
+                  handleConfirmSaveRef.current();
+                  return null;
+                }
+                return prev - 1;
+              });
+            }, 1000);
           }
-        } else {
-          setIsAwaitingConfirmation(false);
-          awaitingRef.current = false;
         }
       } else {
         setErrorMsg(isEn ? 'Could not understand, please speak again or type below.' : 'बात समझ नहीं आई, कृपया दोबारा बोलें या नीचे लिखकर दर्ज करें');
@@ -349,9 +332,8 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
   const handleConfirmSave = async () => {
     if (!parsedData) return;
+    clearAutoSaveCountdown();
     stopListening();
-    setIsAwaitingConfirmation(false);
-    awaitingRef.current = false;
     setIsProcessing(true);
 
     try {
@@ -376,6 +358,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           credit_period_days: type === 'udhaar' ? editCreditPeriodDays : undefined
         });
 
+        // 📢 Authentic Paytm-Style Soundbox Announcement Voice
         const speakText = isEn
           ? `Recorded ${type === 'udhaar' ? 'credit' : 'payment'} of ₹${amount} for ${cName}.`
           : (type === 'jama' ? `${cName} से ₹${amount} प्राप्त हुए` : `${cName} के खाते में ₹${amount} उधार दर्ज हुआ`);
@@ -403,14 +386,14 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
         const speakText = isEn
           ? `Saved ${name} (${stock_quantity} ${unit}) buying ₹${purchase_price} and selling ₹${selling_price}.`
-          : `${name} (${stock_quantity} ${unit}) का खरीद मूल्य ₹${purchase_price} और बिक्री ₹${selling_price} सेव हो गया है`;
+          : `${name} (${stock_quantity} ${unit}) का स्टॉक सेव हो गया है`;
         playSoundboxVoice(speakText, soundboxEnabled);
       }
 
       setSuccessSaved(true);
       setTimeout(() => {
         onClose();
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
       setErrorMsg(isEn ? 'Failed to save: ' + err.message : 'सेव करने में समस्या आई: ' + err.message);
     } finally {
@@ -435,19 +418,37 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
             </div>
             <div className="min-w-0">
               <h3 className="font-extrabold text-base leading-tight truncate">
-                {isEn ? 'Smart Assistant (Voice & Type)' : 'स्मार्ट असिस्टेंट (बोलकर या लिखकर)'}
+                {isEn ? 'Fast Voice Assistant' : 'सुपरफास्ट वॉइस असिस्टेंट'}
               </h3>
               <p className="text-xs text-teal-100 truncate font-medium">
-                {isEn ? 'Speak with voice or type entry details' : 'आवाज़ से बोलें या लिखकर विवरण भरें'}
+                {isEn ? 'Speak naturally to record Udhaar, Jama or Products' : 'बोलिए और एंट्री तुरंत पूरी हो जाएगी'}
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/15 text-white/80 hover:text-white transition-colors shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-2">
+            {/* Auto-Save Toggle Pill */}
+            <button
+              type="button"
+              onClick={handleToggleAutoSave}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all ${
+                autoSaveEnabled
+                  ? 'bg-amber-400 text-slate-950 shadow-xs'
+                  : 'bg-white/15 text-white/80 hover:bg-white/25'
+              }`}
+              title={isEn ? 'Toggle 2s Auto-Complete' : '2-सेकंड स्वतः सेव चालू/बंद करें'}
+            >
+              <Zap className="w-3 h-3" />
+              <span>{autoSaveEnabled ? (isEn ? 'Auto-Save ON' : 'स्वतः सेव चालू') : (isEn ? 'Auto-Save OFF' : 'स्वतः सेव बंद')}</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-white/15 text-white/80 hover:text-white transition-colors shrink-0 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -474,6 +475,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
               type="button"
               onClick={() => {
                 stopListening();
+                clearAutoSaveCountdown();
                 setInputMode('text');
               }}
               className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
@@ -520,7 +522,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
               <button
                 onClick={isListening ? stopListening : () => startListening()}
-                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-95 ${
+                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-95 cursor-pointer ${
                   isListening
                     ? 'bg-rose-500 text-white animate-mic-pulse ring-4 ring-rose-200 dark:ring-rose-900/60 shadow-rose-500/40'
                     : 'bg-gradient-to-br from-teal-600 to-emerald-600 text-white hover:opacity-95 shadow-teal-700/30'
@@ -569,16 +571,16 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                           }
                           stopListening();
                         }}
-                        className="mt-1 px-3.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 active:scale-95 transition-all"
+                        className="mt-1 px-3.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>{isEn ? 'Done Speaking' : 'बोलना पूरा हुआ (विवरण भरें)'}</span>
+                        <span>{isEn ? 'Done Speaking' : 'बोलना पूरा हुआ (तुरंत सेव करें)'}</span>
                       </button>
                     )}
                   </>
                 ) : (
                   <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    {isEn ? 'e.g. "Ramesh credit 500 rupees" or "Maggi buy 12 sell 15"' : 'उदा: "रमेश को 500 रुपये उधार दिया" या "फॉर्च्यून तेल खरीद 120 बिक्री 140"'}
+                    {isEn ? 'e.g. "Ramesh 500 udhar" or "Suresh 200 jama" or "Maggi 20 packet"' : 'उदा: "रमेश 500 उधार" या "सुरेश 200 जमा" या "मैगी 20 पैकेट"'}
                   </p>
                 )}
               </div>
@@ -604,7 +606,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     }
                   }
                 }}
-                placeholder={isEn ? 'e.g. "Ramesh 500 grocery udhaar" or "Suresh 400 paid" or "Maggi buy 12 sell 15"...' : 'उदा: "रमेश को ₹500 का राशन उधार दिया" या "सुरेश ₹400 जमा" या "मैगी 12 खरीद 15 बिक्री"...'}
+                placeholder={isEn ? 'e.g. "Ramesh 500 udhar" or "Suresh 200 jama" or "Maggi 20 buy 12 sell 15"...' : 'उदा: "रमेश 500 उधार" या "सुरेश 200 जमा" या "मैगी 20 खरीद 12 बिक्री 15"...'}
                 className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-2xs"
                 autoFocus
               />
@@ -615,10 +617,10 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   setTranscript(manualText);
                   handleProcessSpeech(manualText);
                 }}
-                className="w-full py-2.5 bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-800 hover:to-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full py-2.5 bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-800 hover:to-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>{isEn ? 'Parse Details Automatically' : 'लिखे हुए वाक्य से विवरण भरें (Auto Fill Details)'}</span>
+                <span>{isEn ? 'Process Entry' : 'तुरंत प्रोसेस करें (Auto Fill Details)'}</span>
               </button>
             </div>
           )}
@@ -637,7 +639,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     setManualText(p.text);
                     handleProcessSpeech(p.text);
                   }}
-                  className="text-left px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-teal-50 dark:bg-slate-800 dark:hover:bg-teal-950/40 border border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-800 transition-all text-xs text-slate-700 dark:text-slate-300 group"
+                  className="text-left px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-teal-50 dark:bg-slate-800 dark:hover:bg-teal-950/40 border border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-800 transition-all text-xs text-slate-700 dark:text-slate-300 group cursor-pointer"
                 >
                   <span className="font-extrabold text-teal-700 dark:text-teal-400 block group-hover:text-teal-800 dark:group-hover:text-teal-300 text-[11px]">
                     {p.label}
@@ -663,7 +665,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                       setInputMode('text');
                       setErrorMsg(null);
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+                    className="px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
                   >
                     <Keyboard className="w-3.5 h-3.5" />
                     <span>{isEn ? 'Switch to Typing' : '⌨️ लिखकर भरें (Type Instead)'}</span>
@@ -677,34 +679,34 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           {isProcessing && (
             <div className="py-4 flex flex-col items-center justify-center text-teal-700 dark:text-teal-400 text-xs space-y-1">
               <RefreshCw className="w-5 h-5 animate-spin" />
-              <span>{isEn ? 'Analyzing details (AI Smart Extraction)...' : 'विवरण की जांच हो रही है (AI Smart Extraction)...'}</span>
+              <span>{isEn ? 'Saving entry...' : 'विवरण सेव हो रहा है...'}</span>
             </div>
           )}
 
           {/* Success Check */}
           {successSaved && (
             <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-center space-y-1 animate-in zoom-in-95">
-              <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto">
+              <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md">
                 <Check className="w-6 h-6" />
               </div>
-              <p className="font-bold text-sm">{isEn ? 'Saved successfully!' : 'सफलतापूर्वक दर्ज हो गया!'}</p>
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">{isEn ? 'Soundbox voice alert played' : 'साउंडबॉक्स पर आवाज आ रही है'}</p>
+              <p className="font-black text-sm">{isEn ? 'Task Completed Successfully!' : 'काम पूरा हुआ! खाता दर्ज हो गया'}</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">{isEn ? 'Paytm-style Soundbox Announcement played 📢' : '📢 साउंडबॉक्स पर घोषणा हो चुकी है'}</p>
             </div>
           )}
 
           {/* EDITABLE PARSED RESULT CARD */}
           {parsedData && !successSaved && (
-            <div className="p-4 rounded-2xl bg-slate-100/90 dark:bg-slate-800/90 border border-slate-300/80 dark:border-slate-700 shadow-md space-y-3.5 animate-in zoom-in-95">
+            <div className="p-4 rounded-2xl bg-slate-100/95 dark:bg-slate-800/95 border border-slate-300/80 dark:border-slate-700 shadow-md space-y-3.5 animate-in zoom-in-95">
               {/* Header with 1-click Intent Switcher */}
               <div className="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5 uppercase tracking-wide">
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{isEn ? 'Automatic Detection:' : 'सिस्टम ने अपने आप समझा:'}</span>
+                    <span>{isEn ? 'Detected Entry:' : 'सिस्टम ने समझा:'}</span>
                   </span>
                   <span className="text-[10px] text-teal-800 dark:text-emerald-300 font-bold bg-teal-100 dark:bg-slate-700/90 px-2 py-0.5 rounded-full flex items-center gap-1 border border-teal-200 dark:border-slate-600">
                     <Edit3 className="w-3 h-3" />
-                    <span>{isEn ? 'Editable' : 'हाथ से बदल सकते हैं'}</span>
+                    <span>{isEn ? 'Editable' : 'बदल सकते हैं'}</span>
                   </span>
                 </div>
 
@@ -713,9 +715,10 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      clearAutoSaveCountdown();
                       setParsedData(prev => prev ? { ...prev, intent: 'transaction' } : null);
                     }}
-                    className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                    className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                       parsedData.intent === 'transaction'
                         ? 'bg-emerald-600 text-white shadow-xs font-black'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -727,9 +730,10 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      clearAutoSaveCountdown();
                       setParsedData(prev => prev ? { ...prev, intent: 'product' } : null);
                     }}
-                    className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                    className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                       parsedData.intent === 'product'
                         ? 'bg-teal-600 text-white shadow-xs font-black'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -741,59 +745,40 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                 </div>
               </div>
 
-              {/* Conversational Voice Confirmation Banner */}
-              {isAwaitingConfirmation && (
-                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-lg space-y-2.5 animate-in slide-in-from-top duration-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                      </span>
-                      <span className="font-extrabold text-xs sm:text-sm tracking-wide">
-                        {isEn ? '🎙️ Assistant is listening for your confirmation...' : '🎙️ असिस्टेंट आपकी पुष्टि सुन रहा है...'}
-                      </span>
-                    </div>
-                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">
-                      {isListening ? (isEn ? 'Live Mic' : 'माइक चालू') : (isEn ? 'Ready' : 'तैयार')}
+              {/* ⚡ SMART AUTO-COMPLETE COUNTDOWN BANNER */}
+              {countdown !== null && (
+                <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md space-y-2 animate-in slide-in-from-top duration-150">
+                  <div className="flex items-center justify-between font-black text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 fill-slate-950 animate-bounce" />
+                      <span>{isEn ? `Auto-completing in ${countdown}s...` : `${countdown} सेकंड में स्वतः सेव हो जाएगा...`}</span>
                     </span>
+                    <button
+                      type="button"
+                      onClick={clearAutoSaveCountdown}
+                      className="px-2 py-0.5 rounded-lg bg-black/20 hover:bg-black/30 text-slate-950 font-bold text-[10px] cursor-pointer"
+                    >
+                      {isEn ? 'Pause & Edit' : 'रोकें व सुधारें ✏️'}
+                    </button>
                   </div>
 
-                  <p className="text-xs text-emerald-100 font-medium leading-relaxed">
-                    {isEn
-                      ? 'Say "Yes" / "Save" / "Confirm" to save automatically, or "No" / "Cancel" to abort.'
-                      : 'सेव करने के लिए बोलें: "हाँ" / "कर दो" / "कन्फर्म", या रद्द करने के लिए बोलें: "नहीं" / "कैंसिल"'}
-                  </p>
+                  {/* Visual countdown progress */}
+                  <div className="w-full bg-black/20 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-slate-950 h-full rounded-full transition-all duration-1000 ease-linear"
+                      style={{ width: `${(countdown / 2) * 100}%` }}
+                    />
+                  </div>
 
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex items-center gap-2 pt-0.5">
                     <button
                       type="button"
-                      onClick={() => handleConfirmationSpeech('हाँ')}
-                      className="flex-1 py-2 px-3 rounded-xl bg-white text-emerald-800 hover:bg-emerald-50 font-black text-xs shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      onClick={() => handleConfirmSave()}
+                      className="flex-1 py-1.5 px-3 rounded-lg bg-slate-950 hover:bg-slate-900 text-white font-black text-xs shadow-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition-all"
                     >
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{isEn ? '✓ Yes, Save' : '✓ हाँ, सेव करो'}</span>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{isEn ? 'Save Right Now ⚡' : 'तुरंत सेव करें ⚡'}</span>
                     </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleConfirmationSpeech('नहीं')}
-                      className="py-2 px-3.5 rounded-xl bg-black/25 hover:bg-black/35 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5 text-rose-300" />
-                      <span>{isEn ? '✕ Cancel' : '✕ नहीं (रद्द)'}</span>
-                    </button>
-
-                    {!isListening && (
-                      <button
-                        type="button"
-                        onClick={() => startConfirmationListening()}
-                        className="p-2 rounded-xl bg-white/20 hover:bg-white/30 text-white cursor-pointer"
-                        title={isEn ? 'Open Mic Again' : 'दोबारा माइक चालू करें'}
-                      >
-                        <Mic className="w-4 h-4" />
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
@@ -808,7 +793,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     <input
                       type="text"
                       value={editCustomerName}
-                      onChange={(e) => setEditCustomerName(e.target.value)}
+                      onFocus={clearAutoSaveCountdown}
+                      onChange={(e) => {
+                        clearAutoSaveCountdown();
+                        setEditCustomerName(e.target.value);
+                      }}
                       placeholder={isEn ? 'e.g. Ramesh Kumar...' : 'उदा: रमेश कुमार...'}
                       className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
@@ -822,8 +811,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                       <div className="flex bg-slate-200 dark:bg-slate-900 p-0.5 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700">
                         <button
                           type="button"
-                          onClick={() => setEditType('udhaar')}
-                          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-0.5 transition-all ${
+                          onClick={() => {
+                            clearAutoSaveCountdown();
+                            setEditType('udhaar');
+                          }}
+                          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-0.5 transition-all cursor-pointer ${
                             editType === 'udhaar' ? 'bg-rose-600 text-white shadow-2xs font-black' : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
@@ -832,8 +824,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditType('jama')}
-                          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-0.5 transition-all ${
+                          onClick={() => {
+                            clearAutoSaveCountdown();
+                            setEditType('jama');
+                          }}
+                          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-0.5 transition-all cursor-pointer ${
                             editType === 'jama' ? 'bg-emerald-600 text-white shadow-2xs font-black' : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
@@ -856,7 +851,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                           type="number"
                           step="any"
                           value={editAmount}
-                          onChange={(e) => setEditAmount(e.target.value)}
+                          onFocus={clearAutoSaveCountdown}
+                          onChange={(e) => {
+                            clearAutoSaveCountdown();
+                            setEditAmount(e.target.value);
+                          }}
                           placeholder="0"
                           className="w-full pl-6 pr-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-black text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
@@ -872,7 +871,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     <input
                       type="text"
                       value={editNotes}
-                      onChange={(e) => setEditNotes(e.target.value)}
+                      onFocus={clearAutoSaveCountdown}
+                      onChange={(e) => {
+                        clearAutoSaveCountdown();
+                        setEditNotes(e.target.value);
+                      }}
                       placeholder={isEn ? 'e.g. 5kg Flour, Oil, Cash...' : 'उदा: 5kg आटा, तेल, नकद...'}
                       className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
@@ -900,8 +903,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                           <button
                             key={p.val}
                             type="button"
-                            onClick={() => setEditCreditPeriodDays(p.val)}
-                            className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
+                            onClick={() => {
+                              clearAutoSaveCountdown();
+                              setEditCreditPeriodDays(p.val);
+                            }}
+                            className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all border cursor-pointer ${
                               editCreditPeriodDays === p.val
                                 ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-xs'
                                 : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -928,8 +934,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     {!billImage ? (
                       <button
                         type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-2 px-3 border border-dashed border-teal-400/60 dark:border-teal-700/60 bg-teal-500/5 dark:bg-slate-900/60 hover:bg-teal-500/10 dark:hover:bg-slate-900 text-teal-800 dark:text-teal-300 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-2xs"
+                        onClick={() => {
+                          clearAutoSaveCountdown();
+                          fileInputRef.current?.click();
+                        }}
+                        className="w-full py-2 px-3 border border-dashed border-teal-400/60 dark:border-teal-700/60 bg-teal-500/5 dark:bg-slate-900/60 hover:bg-teal-500/10 dark:hover:bg-slate-900 text-teal-800 dark:text-teal-300 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
                       >
                         <Camera className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                         <span>{isEn ? '📷 Attach Bill Photo (Optional)' : '📷 बिल / पर्ची का फ़ोटो जोड़ें (वैकल्पिक)'}</span>
@@ -950,7 +959,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                             <button
                               type="button"
                               onClick={() => setViewBillPreview(true)}
-                              className="text-[10px] text-teal-600 dark:text-teal-400 hover:underline font-semibold flex items-center gap-0.5"
+                              className="text-[10px] text-teal-600 dark:text-teal-400 hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                             >
                               <ZoomIn className="w-2.5 h-2.5" /> {isEn ? 'View Larger' : 'बड़ा करके देखें'}
                             </button>
@@ -960,7 +969,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setBillImage(null)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer"
                           title={isEn ? 'Remove photo' : 'फ़ोटो हटाएं'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -979,7 +988,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     <input
                       type="text"
                       value={editProductName}
-                      onChange={(e) => setEditProductName(e.target.value)}
+                      onFocus={clearAutoSaveCountdown}
+                      onChange={(e) => {
+                        clearAutoSaveCountdown();
+                        setEditProductName(e.target.value);
+                      }}
                       placeholder={isEn ? 'e.g. Maggi, Sugar, Mustard Oil...' : 'उदा: मैगी, चीनी, फॉर्च्यून तेल...'}
                       className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-teal-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
@@ -995,7 +1008,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                         type="number"
                         step="any"
                         value={editQuantity}
-                        onChange={(e) => setEditQuantity(e.target.value)}
+                        onFocus={clearAutoSaveCountdown}
+                        onChange={(e) => {
+                          clearAutoSaveCountdown();
+                          setEditQuantity(e.target.value);
+                        }}
                         placeholder="10"
                         className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
                       />
@@ -1007,7 +1024,10 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                       </label>
                       <select
                         value={editUnit}
-                        onChange={(e) => setEditUnit(e.target.value)}
+                        onChange={(e) => {
+                          clearAutoSaveCountdown();
+                          setEditUnit(e.target.value);
+                        }}
                         className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
                       >
                         <option value="पैकेट">पैकेट (Packet)</option>
@@ -1035,7 +1055,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                           type="number"
                           step="any"
                           value={editPurchasePrice}
-                          onChange={(e) => setEditPurchasePrice(e.target.value)}
+                          onFocus={clearAutoSaveCountdown}
+                          onChange={(e) => {
+                            clearAutoSaveCountdown();
+                            setEditPurchasePrice(e.target.value);
+                          }}
                           className="w-full pl-6 pr-2.5 py-1.5 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                         />
                       </div>
@@ -1050,7 +1074,11 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                           type="number"
                           step="any"
                           value={editSellingPrice}
-                          onChange={(e) => setEditSellingPrice(e.target.value)}
+                          onFocus={clearAutoSaveCountdown}
+                          onChange={(e) => {
+                            clearAutoSaveCountdown();
+                            setEditSellingPrice(e.target.value);
+                          }}
                           className="w-full pl-6 pr-2.5 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs font-bold text-emerald-900 dark:text-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                       </div>
@@ -1092,7 +1120,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                         });
                       }
                     }}
-                    className="w-full py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+                    className="w-full py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
                   >
                     <span>{isEn ? '📢 Broadcast Mandi Alert to Staff' : '📢 मंडी अलर्ट जारी करें & स्टाफ को भेजें'}</span>
                   </button>
@@ -1103,11 +1131,12 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                 </div>
               )}
 
+              {/* PRIMARY ACTION BUTTON */}
               {parsedData.intent !== 'unknown' && parsedData.intent !== 'mandi_alert' && (
                 <button
                   onClick={handleConfirmSave}
                   disabled={isProcessing}
-                  className={`w-full mt-2 py-3 px-4 rounded-xl text-white font-extrabold text-sm shadow-md flex items-center justify-center gap-2 active:scale-98 transition-all ${
+                  className={`w-full mt-2 py-3 px-4 rounded-xl text-white font-black text-sm shadow-md flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer ${
                     parsedData.intent === 'transaction'
                       ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 shadow-emerald-900/30'
                       : 'bg-gradient-to-r from-teal-600 to-cyan-700 hover:from-teal-700 hover:to-cyan-800 shadow-teal-900/30'
@@ -1116,8 +1145,8 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                   <Check className="w-4 h-4" />
                   <span>
                     {parsedData.intent === 'transaction'
-                      ? (isEn ? 'Confirm & Save to Khata' : 'पुष्टि करें व खाते में दर्ज करें')
-                      : (isEn ? 'Confirm & Save Product' : 'पुष्टि करें व सामान/स्टॉक सेव करें')}
+                      ? (isEn ? 'Confirm & Save to Khata' : 'पुष्टि करें व खाते में दर्ज करें ⚡')
+                      : (isEn ? 'Confirm & Save Product' : 'पुष्टि करें व सामान/स्टॉक सेव करें ⚡')}
                   </span>
                 </button>
               )}

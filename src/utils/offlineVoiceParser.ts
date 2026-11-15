@@ -13,52 +13,81 @@ export function normalizeDevanagariDigits(str: string): string {
 
 // Convert spoken Hindi number words to digits for accurate parsing
 export function normalizeHindiNumberWords(str: string): string {
+  let res = str;
+
+  // 1. Common spoken Hindi/Hinglish compounds and phrases
   const compounds: [RegExp, string][] = [
-    [/डेढ़\s*हजार|डेढ़\s*हज़ार/gi, '1500'],
-    [/ढाई\s*हजार|ढाई\s*हज़ार/gi, '2500'],
-    [/साढ़े\s*तीन\s*हजार|साढ़े\s*तीन\s*हज़ार/gi, '3500'],
-    [/साढ़े\s*चार\s*हजार|साढ़े\s*चार\s*हज़ार/gi, '4500'],
-    [/साढ़े\s*पाँच\s*हजार|साढ़े\s*पांच\s*हजार|साढ़े\s*पाँच\s*हज़ार/gi, '5500'],
-    [/डेढ़\s*सौ/gi, '150'],
-    [/ढाई\s*सौ/gi, '250'],
-    [/साढ़े\s*तीन\s*सौ/gi, '350'],
-    [/साढ़े\s*चार\s*सौ/gi, '450'],
-    [/साढ़े\s*पाँच\s*सौ|साढ़े\s*पांच\s*सौ/gi, '550'],
-    [/(?:एक|1)\s*(?:हजार|हज़ार)/gi, '1000'],
-    [/(?:दो|2)\s*(?:हजार|हज़ार)/gi, '2000'],
-    [/(?:तीन|3)\s*(?:हजार|हज़ार)/gi, '3000'],
-    [/(?:चार|4)\s*(?:हजार|हज़ार)/gi, '4000'],
-    [/(?:पांच|पाँच|5)\s*(?:हजार|हज़ार)/gi, '5000'],
-    [/(?:दस|10)\s*(?:हजार|हज़ार)/gi, '10000'],
-    [/(?:एक|1)\s*सौ/gi, '100'],
-    [/(?:दो|2)\s*सौ/gi, '200'],
-    [/(?:तीन|3)\s*सौ/gi, '300'],
-    [/(?:चार|4)\s*सौ/gi, '400'],
-    [/(?:पांच|पाँच|5)\s*सौ/gi, '500'],
-    [/(?:छह|छः|6)\s*सौ/gi, '600'],
-    [/(?:सात|7)\s*सौ/gi, '700'],
-    [/(?:आठ|8)\s*सौ/gi, '800'],
-    [/(?:नौ|9)\s*सौ/gi, '900'],
-    [/(?:हजार|हज़ार)/gi, '1000'],
-    [/सौ/gi, '100'],
-    [/\b(?:पचहत्तर)\b/gi, '75'],
+    [/डेढ़\s*हजार|डेढ़\s*हज़ार|dedh\s*hazar|dedh\s*hajar/gi, '1500'],
+    [/ढाई\s*हजार|ढाई\s*हज़ार|dhai\s*hazar|dhai\s*hajar/gi, '2500'],
+    [/साढ़े\s*तीन\s*हजार|साढ़े\s*तीन\s*हज़ार|sadhe\s*teen\s*hazar/gi, '3500'],
+    [/साढ़े\s*चार\s*हजार|साढ़े\s*चार\s*हज़ार|sadhe\s*char\s*hazar/gi, '4500'],
+    [/साढ़े\s*पाँच\s*हजार|साढ़े\s*पांच\s*हजार|साढ़े\s*पाँच\s*हज़ार|sadhe\s*panch\s*hazar/gi, '5500'],
+    [/डेढ़\s*सौ|dedh\s*sau|dedh\s*so/gi, '150'],
+    [/ढाई\s*सौ|dhai\s*sau|dhai\s*so/gi, '250'],
+    [/साढ़े\s*तीन\s*सौ|sadhe\s*teen\s*sau/gi, '350'],
+    [/साढ़े\s*चार\s*सौ|sadhe\s*char\s*sau/gi, '450'],
+    [/साढ़े\s*पाँच\s*सौ|साढ़े\s*पांच\s*सौ|sadhe\s*panch\s*sau/gi, '550'],
+    [/साढ़े\s*छह\s*सौ|sadhe\s*chhah\s*sau/gi, '650'],
+    [/साढ़े\s*सात\s*सौ|sadhe\s*saat\s*sau/gi, '750'],
+    [/साढ़े\s*आठ\s*सौ|sadhe\s*aath\s*sau/gi, '850'],
+    [/साढ़े\s*नौ\s*सौ|sadhe\s*nau\s*sau/gi, '950'],
+    [/(?:एक|1|ek)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '1000'],
+    [/(?:दो|2|do)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '2000'],
+    [/(?:तीन|3|teen)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '3000'],
+    [/(?:चार|4|char)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '4000'],
+    [/(?:पांच|पाँच|5|panch)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '5000'],
+    [/(?:छह|छः|6|chhah)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '6000'],
+    [/(?:सात|7|saat)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '7000'],
+    [/(?:आठ|8|aath)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '8000'],
+    [/(?:नौ|9|nau)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '9000'],
+    [/(?:दस|10|das)\s*(?:हजार|हज़ार|hazar|hajar)/gi, '10000'],
+    [/(?:ग्यारह|11|gyarah)\s*(?:हजार|हज़ार|hazar)/gi, '11000'],
+    [/(?:बारह|12|barah)\s*(?:हजार|हज़ार|hazar)/gi, '12000'],
+    [/(?:पंद्रह|15|pandrah)\s*(?:हजार|हज़ार|hazar)/gi, '15000'],
+    [/(?:बीस|20|bees)\s*(?:हजार|हज़ार|hazar)/gi, '20000'],
+    [/(?:पच्चीस|25|pachees)\s*(?:हजार|हज़ार|hazar)/gi, '25000'],
+    [/(?:पचास|50|pachaas)\s*(?:हजार|हज़ार|hazar)/gi, '50000'],
+    [/(?:एक|1|ek)\s*(?:सौ|sau|so)\s*(?:पचास|50|pachaas)/gi, '150'],
+    [/(?:दो|2|do)\s*(?:सौ|sau|so)\s*(?:पचास|50|pachaas)/gi, '250'],
+    [/(?:तीन|3|teen)\s*(?:सौ|sau|so)\s*(?:पचास|50|pachaas)/gi, '350'],
+    [/(?:चार|4|char)\s*(?:सौ|sau|so)\s*(?:पचास|50|pachaas)/gi, '450'],
+    [/(?:पांच|पाँच|5|panch)\s*(?:सौ|sau|so)\s*(?:पचास|50|pachaas)/gi, '550'],
+    [/(?:एक|1|ek)\s*(?:सौ|sau|so)/gi, '100'],
+    [/(?:दो|2|do)\s*(?:सौ|sau|so)/gi, '200'],
+    [/(?:तीन|3|teen)\s*(?:सौ|sau|so)/gi, '300'],
+    [/(?:चार|4|char)\s*(?:सौ|sau|so)/gi, '400'],
+    [/(?:पांच|पाँच|5|panch)\s*(?:सौ|sau|so)/gi, '500'],
+    [/(?:छह|छः|6|chhah)\s*(?:सौ|sau|so)/gi, '600'],
+    [/(?:सात|7|saat)\s*(?:सौ|sau|so)/gi, '700'],
+    [/(?:आठ|8|aath)\s*(?:सौ|sau|so)/gi, '800'],
+    [/(?:नौ|9|nau)\s*(?:सौ|sau|so)/gi, '900'],
+    [/(?:बारह|12|barah)\s*(?:सौ|sau|so)/gi, '1200'],
+    [/(?:पंद्रह|15|pandrah)\s*(?:सौ|sau|so)/gi, '1500'],
+    [/(?:अठारह|18|atharah)\s*(?:सौ|sau|so)/gi, '1800'],
+    [/(?:हजार|हज़ार|hazar|hajar)/gi, '1000'],
+    [/\b(?:सौ|sau|so)\b/gi, '100'],
+    [/\b(?:पचहत्तर|pachattar)\b/gi, '75'],
     [/\b(?:पचास|pachaas)\b/gi, '50'],
     [/\b(?:चालीस|chalis)\b/gi, '40'],
     [/\b(?:पैंतीस|paintis)\b/gi, '35'],
     [/\b(?:तीस|tees)\b/gi, '30'],
     [/\b(?:पच्चीस|pachees)\b/gi, '25'],
     [/\b(?:बीस|bees)\b/gi, '20'],
+    [/\b(?:पंद्रह|pandrah)\b/gi, '15'],
+    [/\b(?:दस|das)\b/gi, '10'],
     [/\b(?:साठ|saath)\b/gi, '60'],
     [/\b(?:सत्तर|sattar)\b/gi, '70'],
     [/\b(?:अस्सी|assi)\b/gi, '80'],
-    [/\b(?:नब्बे|nabbe)\b/gi, '90'],
-    [/\b(?:दस|das)\b/gi, '10']
+    [/\b(?:नब्बे|nabbe)\b/gi, '90']
   ];
 
-  let res = str;
   for (const [rgx, rep] of compounds) {
     res = res.replace(rgx, rep);
   }
+
+  // 2. Handle speech-to-text numbers like "100 50" -> 150, "200 50" -> 250, "500 20" -> 520
+  res = res.replace(/\b(\d{1,2}00)\s+(\d{1,2})\b/g, (_, h, t) => String(parseInt(h, 10) + parseInt(t, 10)));
+
   return res;
 }
 
@@ -120,8 +149,8 @@ export function parseSpokenDukaanVoice(
     if (!prodName) prodName = isEn ? 'Store Item' : 'किराना सामान';
 
     const confirmSpeech = isEn
-      ? `Mandi alert: ${prodName} new rate ₹${newPrice}. Say 'yes' or 'confirm' to save.`
-      : `मंडी अलर्ट: ${prodName} का नया भाव ₹${newPrice} तैयार है। क्या इसे सेव करें? बोलें 'हाँ' या 'कन्फर्म'`;
+      ? `Mandi alert: ${prodName} new rate ₹${newPrice}.`
+      : `मंडी अलर्ट: ${prodName} का नया भाव ₹${newPrice} तैयार है।`;
 
     return {
       intent: 'mandi_alert',
@@ -140,21 +169,45 @@ export function parseSpokenDukaanVoice(
   // 2. INTENT CLASSIFICATION: TRANSACTION vs PRODUCT
   // -------------------------------------------------------------------------
   // Transaction action indicators: UDHAAR & JAMA keywords
-  const hasUdhaarKeywords = /(उधार|udhar|udhaar|क्रेडिट|credit|lent|on credit|बाकी|खाते में लिख|लिख लो|लिख ले|लिख देना|लिख दो|को दे दो|को दिया|को दिए|का बाकी|का उधार|give.+?(?:credit|udhar)|lent to|debit)/i.test(clean);
-  const hasJamaKeywords = /(जमा|jama|paid|payment|pay|received|receive|got|collected|settled|पेमेंट|भुगतान|वसूल|चुकाया|खाता चुकता|ने दिए|ने दिया|ने जमा|से मिला|से मिले|से आया|से आए|से ले लिया|दे गया|दे गए|कैश मिला|पेमेंट आया|फोनपे|phonepe|gpay|गूगल पे|पेटीएम|paytm)/i.test(clean);
+  const hasUdhaarKeywords = /(उधार|udhar|udhaar|क्रेडिट|credit|lent|on credit|बाकी|खाते में लिख|लिख लो|लिख ले|लिख देना|लिख दो|को दे दो|को दिया|को दिए|का बाकी|का उधार|give.+?(?:credit|udhar)|lent to|debit|दे दिया|सामान दिया|ले गया)/i.test(clean);
+  const hasJamaKeywords = /(जमा|jama|paid|payment|pay|received|receive|got|collected|settled|पेमेंट|भुगतान|वसूल|चुकाया|खाता चुकता|ने दिए|ने दिया|ने जमा|से मिला|से मिले|से आया|से आए|से ले लिया|दे गया|दे गए|कैश मिला|पेमेंट आया|फोनपे|phonepe|gpay|गूगल पे|पेटीएम|paytm|ऑनलाइन मिला)/i.test(clean);
 
   // Product Inventory indicators
   const hasInventoryExplicitKeywords = /(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/i.test(clean);
   const hasStockActionOnly = /(स्टॉक|stock)/i.test(clean) && !hasUdhaarKeywords && !hasJamaKeywords;
 
-  // IMPORTANT: If Udhaar or Jama is spoken, it is DEFINITELY a TRANSACTION!
-  // (Even if user says "10 kg aata 250 udhar" - "10 kg aata" is the item note, NOT a product creation)
-  const isTransactionIntent = hasUdhaarKeywords || hasJamaKeywords || (!hasInventoryExplicitKeywords && !hasStockActionOnly && !/(खरीद|बिक्री|purchase|sell)/i.test(clean));
+  // Check if speech matches any known product name
+  const matchedExistingProd = findEquivalentProduct(clean, knownProducts) || knownProducts.find(p => {
+    const pName = p.name.toLowerCase().trim();
+    return clean.includes(pName) || pName.split(/[\s\(\)]+/).some(t => t.length >= 3 && clean.includes(t));
+  });
+
+  // Check if speech matches any known customer name
+  const matchedExistingCust = findEquivalentCustomer(clean, knownCustomers) || knownCustomers.find(c => {
+    const cName = c.name.toLowerCase().trim();
+    return clean.includes(cName) || areNamesEquivalent(c.name, clean);
+  });
+
+  // Intent decision:
+  // If user mentions customer OR Udhaar/Jama OR there's no explicit product keyword, treat as TRANSACTION
+  let isTransactionIntent = false;
+  if (hasUdhaarKeywords || hasJamaKeywords) {
+    isTransactionIntent = true;
+  } else if (matchedExistingCust && !hasInventoryExplicitKeywords) {
+    isTransactionIntent = true;
+  } else if (hasInventoryExplicitKeywords || hasStockActionOnly) {
+    isTransactionIntent = false;
+  } else if (matchedExistingProd && !hasUdhaarKeywords && !hasJamaKeywords) {
+    isTransactionIntent = false;
+  } else {
+    // Default to transaction for shopkeeper daily usage
+    isTransactionIntent = true;
+  }
 
   // -------------------------------------------------------------------------
   // 3. CASE: CUSTOMER LEDGER TRANSACTION (UDHAAR vs JAMA)
   // -------------------------------------------------------------------------
-  if (isTransactionIntent && !hasInventoryExplicitKeywords) {
+  if (isTransactionIntent) {
     // 3.1 Extract Credit Period Days (e.g. "15 din ke liye", "1 mahina")
     let creditPeriodDays = 15;
     const daysMatch = clean.match(/(\d+)\s*(दिन|din|days)/i);
@@ -168,8 +221,6 @@ export function parseSpokenDukaanVoice(
 
     // 3.2 Extract Amount (Accurately ignores quantity units like '10 kg', '2 packet', '15 din')
     let amount = 0;
-
-    // Remove days and period mentions first
     const textWithoutDays = clean.replace(/(\d+)\s*(दिन|din|days|mahina|mahine|महीने|महीना|हफ्ता|hafta|week)/gi, ' ');
 
     // Rule A: Number explicitly tied to currency markers (₹500, 500 रुपये, 500 rs)
@@ -179,10 +230,11 @@ export function parseSpokenDukaanVoice(
     if (currMatch && currMatch[1]) {
       amount = parseFloat(currMatch[1]);
     } else {
-      // Rule B: Number directly preceding transaction action words: e.g. "500 उधार", "250 जमा", "500 लिख लो"
-      const txMatch = textWithoutDays.match(/(\d+(\.\d+)?)\s*(?:उधार|udhar|udhaar|जमा|jama|पेमेंट|paid|क्रेडिट|credit|लिखो|लिख लो|लिख दे|बाकी)/i);
-      if (txMatch && txMatch[1]) {
-        amount = parseFloat(txMatch[1]);
+      // Rule B: Number directly preceding or following transaction action words: e.g. "500 उधार", "250 जमा", "500 लिख लो"
+      const txMatch = textWithoutDays.match(/(\d+(\.\d+)?)\s*(?:उधार|udhar|udhaar|जमा|jama|पेमेंट|paid|क्रेडिट|credit|लिखो|लिख लो|लिख दे|बाकी)/i) ||
+                      textWithoutDays.match(/(?:उधार|udhar|udhaar|जमा|jama|पेमेंट|paid|क्रेडिट|credit)\s*(\d+(\.\d+)?)/i);
+      if (txMatch && (txMatch[1] || txMatch[2])) {
+        amount = parseFloat(txMatch[1] || txMatch[2]);
       } else {
         // Rule C: Strip item quantities (5 kg, 2 packet, 10 piece) and pick the remaining money amount
         const cleanWithoutQty = textWithoutDays
@@ -190,13 +242,11 @@ export function parseSpokenDukaanVoice(
 
         const allNumbers = cleanWithoutQty.match(/\d+(\.\d+)?/g);
         if (allNumbers && allNumbers.length > 0) {
-          // In Hindi speech, shopkeeper says: "Ramesh 5 kilo aata 250" -> 250 is the price (last number)
+          // In Hindi speech: "Ramesh 500" -> 500, "Ramesh 5 kilo aata 250" -> 250
           amount = parseFloat(allNumbers[allNumbers.length - 1]);
         }
       }
     }
-
-    if (amount <= 0) amount = 100;
 
     // 3.3 Determine Udhaar vs Jama
     let txType: 'udhaar' | 'jama' = 'udhaar';
@@ -214,22 +264,9 @@ export function parseSpokenDukaanVoice(
     }
 
     // 3.4 Match or Extract Customer Name (with Bilingual English-Hindi matching)
-    let matchedCustomer: Customer | undefined = undefined;
+    let matchedCustomer: Customer | undefined = matchedExistingCust;
 
-    // Priority A: Search existing customers by exact or bilingual equivalent name
-    matchedCustomer = findEquivalentCustomer(clean, knownCustomers);
-
-    // Priority B: Match First Name (e.g. "Ramesh" for "Ramesh Kumar" or "रमेश" for "रमेश जी")
-    if (!matchedCustomer) {
-      for (const c of knownCustomers) {
-        if (areNamesEquivalent(c.name, clean)) {
-          matchedCustomer = c;
-          break;
-        }
-      }
-    }
-
-    // Priority C: Match by Phone number if spoken
+    // Check by Phone number if spoken
     if (!matchedCustomer) {
       const phoneMatch = clean.match(/\b\d{10}\b/);
       if (phoneMatch) {
@@ -241,40 +278,49 @@ export function parseSpokenDukaanVoice(
 
     // If customerName not yet determined, extract candidate name from speech
     if (!customerName) {
-      // Pattern 1: English preposition: "to <name>", "for <name>", "from <name>", "by <name>"
-      const engPrep = clean.match(/(?:to|for|from|by)\s+([a-zA-Z\u0900-\u097F]+(?:\s+[a-zA-Z\u0900-\u097F]+)?)/i);
-      if (engPrep && engPrep[1]) {
-        const cand = engPrep[1].trim();
-        if (!/^(cash|online|phonepe|gpay|paytm|udhar|jama|credit|store|shop|me|us|account)$/i.test(cand)) {
-          customerName = isEn ? capitalizeWords(cand) : cand;
-        }
-      }
+      // Clean non-name tokens to extract name cleanly
+      let candText = normalizedText;
 
-      // Pattern 2: Hindi markers: "<name> को", "<name> ने", "<name> से", "<name> का"
-      if (!customerName) {
-        const hindiMarker = normalizedText.match(/^([a-zA-Z\u0900-\u097F]+(?:\s+[a-zA-Z\u0900-\u097F]+)?)\s*(?:को|ने|से|का|की)\b/i);
-        if (hindiMarker && hindiMarker[1]) {
-          const cand = hindiMarker[1].trim();
-          if (!/^(bolkar|bol|voice|add|likh|likho|khata|entry|namaste|hello|aaj|kal)$/i.test(cand)) {
-            customerName = isEn ? capitalizeWords(cand) : cand;
+      // Remove amounts
+      if (amount > 0) {
+        candText = candText.replace(new RegExp(`\\b${amount}\\b`, 'g'), '');
+      }
+      candText = candText.replace(/\b\d+(\.\d+)?\b/g, '');
+
+      // Remove currency markers
+      candText = candText.replace(/(?:₹|रुपये|रुपया|rupaye|rupee|rupees|rs\.?)/gi, '');
+
+      // Remove credit period words
+      candText = candText.replace(/(\d+)?\s*(?:दिन|din|days|mahina|mahine|महीने|महीना|हफ्ता|hafta|week|ke\s*liye|के\s*लिए)/gi, '');
+
+      // Remove action keywords
+      candText = candText.replace(/\b(?:udhar|udhaar|jama|paid|payment|credit|debit|likh|likho|likh\s*lo|likh\s*do|likh\s*dena|entry|khata|cash|phonepe|gpay|paytm|online)\b/gi, '');
+      candText = candText.replace(/(?:उधार|जमा|पेमेंट|क्रेडिट|डेबिट|लिखो|लिख\s*लो|लिख\s*देना|लिख\s*दो|दर्ज\s*करो|दर्ज|खाते\s*में|खाता|कैश|नकद|नगद|फोनपे|गूगल\s*पे|पेटीएम|ऑनलाइन)/gi, '');
+      candText = candText.replace(/(?:ने\s*दिए|ने\s*दिया|को\s*दिया|को\s*दिए|से\s*मिला|से\s*मिले|से\s*आया|से\s*आए|दे\s*गया|ले\s*गया|मिला|आया|दिए|दिया|बाकी|चुकता|वसूल)/gi, '');
+
+      // Remove grammar particles
+      candText = candText.replace(/\b(?:to|for|from|by|bhai|ji|saab|account)\b/gi, '');
+      candText = candText.replace(/(?:को|ने|से|का|की|के|में|भाई|जी|बाबू|साहब|साहबजी)/gi, '');
+
+      // Remove item quantities (e.g. 5 किलो आटा -> retain or separate)
+      candText = candText.replace(/(?:पैकेटों|पैकेट|किलोग्राम|किलो|लीटरों|लीटर|पीस|बोरी|कार्टन|पेटी|दर्जन|बोतल|ग्राम|kg|ltr|packet|bori|pcs)/gi, '');
+
+      // Strip excess whitespace and punctuation
+      const nameCandidate = candText.replace(/[.,/#!$%^&*;:{}=\-_`~()?"'₹]/g, ' ').replace(/\s+/g, ' ').trim();
+
+      if (nameCandidate && nameCandidate.length >= 2) {
+        // If multiple words remain, take the first 1-2 words as name
+        const tokens = nameCandidate.split(' ').filter(t => t.length >= 2 && !/^(bolkar|bol|voice|add|namaste|hello|aaj|kal|aur|bhi)$/i.test(t));
+        if (tokens.length > 0) {
+          const candidateStr = tokens.slice(0, 2).join(' ');
+          // Check if candidate matches any known customer
+          const found = findEquivalentCustomer(candidateStr, knownCustomers);
+          if (found) {
+            matchedCustomer = found;
+            customerName = found.name;
+          } else {
+            customerName = isEn ? capitalizeWords(candidateStr) : candidateStr;
           }
-        }
-      }
-
-      // Pattern 3: Words before amount or action word
-      if (!customerName) {
-        const beforeAction = normalizedText.split(/(?:\s+को|\s+ने|\s+से|\s+udhar|\s+udhaar|\s+jama|\s+जमा|\s+उधार|\s+\d+)/i)[0].trim();
-        if (beforeAction && beforeAction.length >= 2 && !/^(bolkar|voice|add|likh|likho|entry|namaste|hello)$/i.test(beforeAction)) {
-          customerName = isEn ? capitalizeWords(beforeAction) : beforeAction;
-        }
-      }
-
-      // Check if extracted candidate matches any known customer in other language
-      if (customerName) {
-        const found = findEquivalentCustomer(customerName, knownCustomers);
-        if (found) {
-          matchedCustomer = found;
-          customerName = found.name;
         }
       }
 
@@ -303,11 +349,11 @@ export function parseSpokenDukaanVoice(
 
     const confirmSpeech = isEn
       ? (txType === 'udhaar'
-          ? `Adding credit of ₹${amount} for ${customerName}. Say 'yes' or 'confirm' to save.`
-          : `Payment of ₹${amount} received from ${customerName}. Say 'yes' or 'confirm' to save.`)
+          ? `Adding credit of ₹${amount} for ${customerName}.`
+          : `Payment of ₹${amount} received from ${customerName}.`)
       : (txType === 'udhaar'
-          ? `${customerName} के खाते में ₹${amount} उधार लिखा जा रहा है। क्या मैं इसे सेव कर दूँ? बोलें 'हाँ' या 'कन्फर्म'`
-          : `${customerName} से ₹${amount} जमा प्राप्त हुआ है। क्या मैं इसे सेव कर दूँ? बोलें 'हाँ' या 'कन्फर्म'`);
+          ? `${customerName} के खाते में ₹${amount} उधार दर्ज!`
+          : `${customerName} से ₹${amount} जमा प्राप्त!`);
 
     return {
       intent: 'transaction',
@@ -376,13 +422,7 @@ export function parseSpokenDukaanVoice(
   }
 
   // Check known product match from database (with Bilingual English-Hindi matching)
-  let matchedProd = findEquivalentProduct(clean, knownProducts);
-  if (!matchedProd) {
-    matchedProd = knownProducts.find(p => {
-      const pName = p.name.toLowerCase().trim();
-      return clean.includes(pName) || pName.split(/[\s\(\)]+/).some(t => t.length >= 3 && clean.includes(t));
-    });
-  }
+  let matchedProd = matchedExistingProd;
 
   if (matchedProd) {
     if (purchasePrice === 0) purchasePrice = Number(matchedProd.purchase_price) || 0;
@@ -435,12 +475,8 @@ export function parseSpokenDukaanVoice(
   else if (/चाय|कॉफी|दूध|कोल्डड्रिंक|पानी|tea|coffee|milk/i.test(prodName)) category = 'पेय पदार्थ';
 
   const confirmProductSpeech = isEn
-    ? (matchedProd
-        ? `${prodName} stock ${quantity} ${unit} ready. Say 'yes' or 'confirm' to update.`
-        : `${prodName} ${quantity} ${unit}, buy ₹${purchasePrice} and sell ₹${sellingPrice}. Say 'yes' or 'confirm' to save.`)
-    : (matchedProd
-        ? `${prodName} का नया स्टॉक ${quantity} ${unit} तैयार है। क्या इसे जोड़ दूँ? बोलें 'हाँ' या 'कन्फर्म'`
-        : `${prodName} (${quantity} ${unit}) खरीद ₹${purchasePrice} व बिक्री ₹${sellingPrice} तैयार है। क्या इसे सेव कर दूँ? बोलें 'हाँ' या 'कन्फर्म'`);
+    ? `${prodName} (${quantity} ${unit}) saved.`
+    : `${prodName} (${quantity} ${unit}) का स्टॉक सेव!`;
 
   return {
     intent: 'product',
