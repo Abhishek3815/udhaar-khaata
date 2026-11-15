@@ -234,7 +234,57 @@ function extractAmountFromText(clean: string): number {
 
 // Fallback smart rule-based parser for Hindi/Hinglish/English voice commands
 function parseVoiceRuleBased(text: string, knownCustomers: { id: number; name: string }[] = [], knownProducts: any[] = []) {
-  const clean = text.toLowerCase().trim();
+  const devanagariDigits: Record<string, string> = {
+    '०': '0', '१': '1', '२': '2', '३': '3', '४': '4',
+    '५': '5', '६': '6', '७': '7', '८': '8', '९': '9'
+  };
+  let normalized = text.replace(/[०-९]/g, d => devanagariDigits[d] || d);
+
+  const compounds: [RegExp, string][] = [
+    [/डेढ़\s*हजार|डेढ़\s*हज़ार/gi, '1500'],
+    [/ढाई\s*हजार|ढाई\s*हज़ार/gi, '2500'],
+    [/साढ़े\s*तीन\s*हजार|साढ़े\s*तीन\s*हज़ार/gi, '3500'],
+    [/साढ़े\s*चार\s*हजार|साढ़े\s*चार\s*हज़ार/gi, '4500'],
+    [/साढ़े\s*पाँच\s*हजार|साढ़े\s*पांच\s*हजार|साढ़े\s*पाँच\s*हज़ार/gi, '5500'],
+    [/डेढ़\s*सौ/gi, '150'],
+    [/ढाई\s*सौ/gi, '250'],
+    [/साढ़े\s*तीन\s*सौ/gi, '350'],
+    [/साढ़े\s*चार\s*सौ/gi, '450'],
+    [/साढ़े\s*पाँच\s*सौ|साढ़े\s*पांच\s*सौ/gi, '550'],
+    [/(?:एक|1)\s*(?:हजार|हज़ार)/gi, '1000'],
+    [/(?:दो|2)\s*(?:हजार|हज़ार)/gi, '2000'],
+    [/(?:तीन|3)\s*(?:हजार|हज़ार)/gi, '3000'],
+    [/(?:चार|4)\s*(?:हजार|हज़ार)/gi, '4000'],
+    [/(?:पांच|पाँच|5)\s*(?:हजार|हज़ार)/gi, '5000'],
+    [/(?:दस|10)\s*(?:हजार|हज़ार)/gi, '10000'],
+    [/(?:एक|1)\s*सौ/gi, '100'],
+    [/(?:दो|2)\s*सौ/gi, '200'],
+    [/(?:तीन|3)\s*सौ/gi, '300'],
+    [/(?:चार|4)\s*सौ/gi, '400'],
+    [/(?:पांच|पाँच|5)\s*सौ/gi, '500'],
+    [/(?:छह|छः|6)\s*सौ/gi, '600'],
+    [/(?:सात|7)\s*सौ/gi, '700'],
+    [/(?:आठ|8)\s*सौ/gi, '800'],
+    [/(?:नौ|9)\s*सौ/gi, '900'],
+    [/(?:हजार|हज़ार)/gi, '1000'],
+    [/सौ/gi, '100'],
+    [/\b(?:पचहत्तर)\b/gi, '75'],
+    [/\b(?:पचास|pachaas)\b/gi, '50'],
+    [/\b(?:चालीस|chalis)\b/gi, '40'],
+    [/\b(?:पैंतीस|paintis)\b/gi, '35'],
+    [/\b(?:तीस|tees)\b/gi, '30'],
+    [/\b(?:पच्चीस|pachees)\b/gi, '25'],
+    [/\b(?:बीस|bees)\b/gi, '20'],
+    [/\b(?:साठ|saath)\b/gi, '60'],
+    [/\b(?:सत्तर|sattar)\b/gi, '70'],
+    [/\b(?:अस्सी|assi)\b/gi, '80'],
+    [/\b(?:नब्बे|nabbe)\b/gi, '90'],
+    [/\b(?:दस|das)\b/gi, '10']
+  ];
+  for (const [rgx, rep] of compounds) {
+    normalized = normalized.replace(rgx, rep);
+  }
+  const clean = normalized.toLowerCase().trim();
 
   // 1. Detect Mandi Rate Alert (Wholesale / Market price fluctuation)
   const isMandiAlert = /मंडी|mandi|भाव बढ़|भाव घट|रेट बढ़|रेट घट|दाम बढ़|दाम घट|तेज हो गया|मंदा हो गया|नया रेट|स्टाफ को बता|अलर्ट/.test(clean);
@@ -281,25 +331,14 @@ function parseVoiceRuleBased(text: string, knownCustomers: { id: number; name: s
   const isEn = !/[\u0900-\u097F]/.test(clean) && /[a-zA-Z]/.test(clean);
 
   // 2. DETECT PRODUCT vs TRANSACTION INTENT
-  const hasUnit = /(पैकेट|पैकेटों|packet|packets|pkt|pkts|किलो|किलोग्राम|kg|kilos?|लीटर|लीटरों|ltr|liters?|litres?|पीस|pieces?|pcs|बोरी|bori|कार्टन|cartons?|पेटी|peti|दर्जन|dozens?|बोतल|bottles?|ग्राम|gm|grams?|डब्बा|डिब्बा|boxes?|box|पाउच|pouches?)/i.test(clean);
-  const hasProductKeywords = /(प्रोडक्ट|सामान|माल|स्टॉक|इन्वेंटरी|आइटम|item|product|stock|inventory|खरीद|बिक्री|purchase|buying|buy|selling|sale|sell|cost|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|रेट बदलो|स्टॉक बढ़ाओ|स्टॉक जोड़ो)/i.test(clean);
-  const hasInventoryAction = /(स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|जोड़ दो|जोड़ो|ऐड करो|add kar|add product|add stock|update stock|नया सामान)/i.test(clean);
+  const hasUdhaarKeywords = /(उधार|udhar|udhaar|क्रेडिट|credit|lent|on credit|बाकी|खाते में लिख|लिख लो|लिख ले|लिख देना|लिख दो|को दे दो|को दिया|को दिए|का बाकी|का उधार|give.+?(?:credit|udhar)|lent to|debit)/i.test(clean);
+  const hasJamaKeywords = /(जमा|jama|paid|payment|pay|received|receive|got|collected|settled|पेमेंट|भुगतान|वसूल|चुकाया|खाता चुकता|ने दिए|ने दिया|ने जमा|से मिला|से मिले|से आया|से आए|से ले लिया|दे गया|दे गए|कैश मिला|पेमेंट आया|फोनपे|phonepe|gpay|गूगल पे|पेटीएम|paytm)/i.test(clean);
+  const hasInventoryExplicitKeywords = /(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/i.test(clean);
 
-  // Check if spoken phrase mentions any known product in store
-  const matchedProductFromDb = knownProducts.find(p => {
-    const pName = String(p.name || '').toLowerCase().trim();
-    const tokens = pName.split(/[\s\(\)]+/).filter(t => t.length >= 3);
-    return tokens.some(t => clean.includes(t)) || clean.includes(pName);
-  });
-
-  const hasCustomerRelation = /(?:को उधार|को दिया|को दिए|को दे दो|का बाकी|खाते में लिखो|खाते में जोड़ो|ने दिया|ने दिए|ने जमा किया|से मिला|से आए|से ले लिया|ग्राहक|customer|(?:to\s+(?!stock|inventory|store|shop)[a-z]+)|(?:for\s+(?!stock|inventory|store|shop)[a-z]+)|(?:from\s+[a-z]+)|(?:paid\s+by)|(?:credit\s+to)|(?:lent\s+to))/i.test(clean);
-  const hasExplicitCustomerTx = /(?:give\s+.+?\s*(?:to|for)|credit\s+(?:to|for)|lent\s+to|debit\s+to|paid\s+by|received\s+from|from\s+[a-z]+\s*paid|[a-z]+\s+paid|[a-z]+\s+gave|[a-z]+\s+deposited)/i.test(clean);
-
-  const isProductIntent = !hasCustomerRelation && !hasExplicitCustomerTx && (
-    hasUnit ||
-    hasProductKeywords ||
-    hasInventoryAction ||
-    (matchedProductFromDb && /(स्टॉक|भाव|रेट|पैकेट|किलो|लीटर|पीस|जोड़ो|कीमत|stock|price|rate|add)/i.test(clean))
+  // If transaction keywords exist, it's NOT a product intent
+  const isProductIntent = !hasUdhaarKeywords && !hasJamaKeywords && (
+    hasInventoryExplicitKeywords ||
+    (/(स्टॉक|stock)/i.test(clean) && /(जोड़ो|बढ़ाओ|update|add)/i.test(clean))
   );
 
   // -------------------------------------------------------------------------

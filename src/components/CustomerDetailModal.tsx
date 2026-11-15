@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, ArrowDownLeft, ArrowUpRight, Plus, Phone, MapPin, Trash2, Mic, MicOff, MessageCircle, Calendar, FileText, Check, Camera, ZoomIn, Loader2, QrCode, Clock, RotateCcw, ShieldAlert, BookOpen, Copy, ExternalLink, Edit3 } from 'lucide-react';
 import { Customer, Transaction, ShopSettings } from '../types';
 import { formatCurrency, generateWhatsAppReminder, generateTransactionWhatsAppSlip, playSoundboxVoice, createSpeechRecognizer, isSpeechRecognitionSupported, formatTransactionDate, formatTransactionTime, formatTransactionDateTime, playMicChime, requestMicrophoneAccess } from '../utils/speech';
+import { parseSpokenDukaanVoice } from '../utils/offlineVoiceParser';
 import { compressImageFile } from '../utils/imageUtils';
 import { BillImageModal } from './BillImageModal';
 import { UpiQrModal } from './UpiQrModal';
@@ -165,49 +166,20 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   const processVoiceInput = (text: string) => {
-    const clean = text.toLowerCase().trim();
-
-    // Amount
-    let extractedAmount = 0;
-    const numMatch = clean.match(/(\d+(\.\d+)?)/);
-    if (numMatch) {
-      extractedAmount = parseFloat(numMatch[1]);
-    } else if (/डेढ़ सौ/.test(clean)) extractedAmount = 150;
-    else if (/ढाई सौ/.test(clean)) extractedAmount = 250;
-    else if (/साढ़े तीन सौ/.test(clean)) extractedAmount = 350;
-    else if (/हजार|हज़ार/.test(clean)) extractedAmount = 1000;
-    else if (/सौ/.test(clean)) extractedAmount = 100;
+    const parsed = parseSpokenDukaanVoice(text, customer ? [customer] : []);
+    const extractedAmount = parsed.amount || 0;
+    const detectedType = parsed.type || txType;
+    const detectedNote = parsed.notes || '';
 
     if (extractedAmount > 0) {
       setAmount(String(extractedAmount));
     }
-
-    // Type
-    const isUdhaar = /उधार|बाकी|लिखो|लिख लो|दिया|udhar/.test(clean);
-    const isJama = /जमा|पेमेंट|मिला|आया|paid|jama|phonepe|gpay|paytm|cash|नकद/.test(clean);
-
-    let detectedType = txType;
-    if (isJama && !isUdhaar) {
-      detectedType = 'jama';
-      setTxType('jama');
-    } else if (isUdhaar) {
-      detectedType = 'udhaar';
-      setTxType('udhaar');
-    }
-
-    // Notes
-    let detectedNote = '';
-    if (/phonepe|फोनपे/i.test(clean)) detectedNote = 'PhonePe ऑनलाइन';
-    else if (/gpay|गूगल पे/i.test(clean)) detectedNote = 'Google Pay';
-    else if (/paytm|पेटीएम/i.test(clean)) detectedNote = 'Paytm';
-    else if (/कैश|नकद|cash/i.test(clean)) detectedNote = 'नकद कैश';
-    else if (/आटा/i.test(clean)) detectedNote = 'आटा किराना';
-    else if (/तेल/i.test(clean)) detectedNote = 'तेल';
-    else if (/दाल/i.test(clean)) detectedNote = 'दाल';
-    else if (/राशन/i.test(clean)) detectedNote = 'राशन सामान';
-
+    setTxType(detectedType);
     if (detectedNote) {
       setNotes(detectedNote);
+    }
+    if (parsed.creditPeriodDays && parsed.creditPeriodDays > 0) {
+      setCreditPeriodDays(parsed.creditPeriodDays);
     }
 
     if (extractedAmount > 0) {
@@ -215,6 +187,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
       if (soundboxEnabled) {
         playSoundboxVoice(`₹${extractedAmount} ${detectedType === 'udhaar' ? 'उधार' : 'जमा'} सेट हो गया`, true);
       }
+    } else {
+      setVoiceNotice(`सुना: "${text}"`);
     }
   };
 
@@ -305,8 +279,10 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         await loadCustomerTransactions(customer.id);
         onRefresh();
 
-        // Soundbox announcement
-        const phrase = `${customer.name} के खाते में ${formatCurrency(txAmount)} ${txType === 'udhaar' ? 'उधार' : 'जमा'} दर्ज हो गया है`;
+        // Soundbox announcement (Paytm / PhonePe style)
+        const phrase = txType === 'jama'
+          ? `${customer.name} से ₹${txAmount} प्राप्त हुए`
+          : `${customer.name} के खाते में ₹${txAmount} उधार दर्ज हुआ`;
         playSoundboxVoice(phrase, soundboxEnabled);
       }
     } catch (err) {

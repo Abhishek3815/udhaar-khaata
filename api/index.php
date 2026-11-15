@@ -1708,7 +1708,55 @@ try {
             echo json_encode(['success' => false, 'error' => 'Voice speech text is required']);
             exit;
         }
-        $text = mb_strtolower($rawText, 'UTF-8');
+
+        // Normalize Devanagari numerals (०-९) to ASCII digits (0-9)
+        $devanagari = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
+        $asciiDigits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        $normalizedText = str_replace($devanagari, $asciiDigits, $rawText);
+
+        // Normalize Hindi number words
+        $wordMap = [
+            '/(डेढ़\s*हजार|डेढ़\s*हज़ार)/ui' => '1500',
+            '/(ढाई\s*हजार|ढाई\s*हज़ार)/ui' => '2500',
+            '/(डेढ़\s*सौ)/ui' => '150',
+            '/(ढाई\s*सौ)/ui' => '250',
+            '/(साढ़े\s*तीन\s*सौ)/ui' => '350',
+            '/(साढ़े\s*चार\s*सौ)/ui' => '450',
+            '/(साढ़े\s*पाँच\s*सौ|साढ़े\s*पांच\s*सौ)/ui' => '550',
+            '/((?:एक|1)\s*(?:हजार|हज़ार))/ui' => '1000',
+            '/((?:दो|2)\s*(?:हजार|हज़ार))/ui' => '2000',
+            '/((?:तीन|3)\s*(?:हजार|हज़ार))/ui' => '3000',
+            '/((?:चार|4)\s*(?:हजार|हज़ार))/ui' => '4000',
+            '/((?:पांच|पाँच|5)\s*(?:हजार|हज़ार))/ui' => '5000',
+            '/((?:दस|10)\s*(?:हजार|हज़ार))/ui' => '10000',
+            '/((?:एक|1)\s*सौ)/ui' => '100',
+            '/((?:दो|2)\s*सौ)/ui' => '200',
+            '/((?:तीन|3)\s*सौ)/ui' => '300',
+            '/((?:चार|4)\s*सौ)/ui' => '400',
+            '/((?:पांच|पाँच|5)\s*सौ)/ui' => '500',
+            '/((?:छह|छः|6)\s*सौ)/ui' => '600',
+            '/((?:सात|7)\s*सौ)/ui' => '700',
+            '/((?:आठ|8)\s*सौ)/ui' => '800',
+            '/((?:नौ|9)\s*सौ)/ui' => '900',
+            '/((?:हजार|हज़ार))/ui' => '1000',
+            '/(\bसौ\b)/ui' => '100',
+            '/(\bपचहत्तर\b)/ui' => '75',
+            '/(\bपचास\b)/ui' => '50',
+            '/(\bचालीस\b)/ui' => '40',
+            '/(\bतीस\b)/ui' => '30',
+            '/(\bपच्चीस\b)/ui' => '25',
+            '/(\bबीस\b)/ui' => '20',
+            '/(\bसाठ\b)/ui' => '60',
+            '/(\bसत्तर\b)/ui' => '70',
+            '/(\bअस्सी\b)/ui' => '80',
+            '/(\bनब्बे\b)/ui' => '90',
+            '/(\bदस\b)/ui' => '10'
+        ];
+        foreach ($wordMap as $pattern => $replacement) {
+            $normalizedText = preg_replace($pattern, $replacement, $normalizedText);
+        }
+
+        $text = mb_strtolower($normalizedText, 'UTF-8');
 
         // Fetch store customers & products for intelligent matching
         $custStmt = $pdo->prepare("SELECT id, name FROM customers WHERE shop_id = ?");
@@ -1764,13 +1812,10 @@ try {
         $isSpokenEnglish = !preg_match('/[\x{0900}-\x{097F}]/u', $rawText) && preg_match('/^[a-zA-Z0-9\s.,₹!?"\'-]+$/', $rawText);
 
         // 3. Detect Product Intent vs Customer Transaction
-        $hasUnit = preg_match('/(पैकेट|पैकेटों|packet|packets|pkt|pkts|किलो|किलोग्राम|kg|kilo|kilos|लीटर|लीटरों|ltr|liter|liters|litre|litres|पीस|pieces|pcs|piece|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतल|bottle|bottles|ग्राम|gm|gram|grams|डब्बा|डिब्बा|box|boxes|पाउच|pouch|pouches)/ui', $text);
-        $hasProductKeywords = preg_match('/(प्रोडक्ट|सामान|माल|स्टॉक|इन्वेंटरी|आइटम|item|product|stock|inventory|खरीद|बिक्री|purchase|buy|buying|cost|sell|selling|sale|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|रेट बदलो|स्टॉक बढ़ाओ|स्टॉक जोड़ो)/ui', $text);
-        $hasInventoryAction = preg_match('/(स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|जोड़ दो|जोड़ो|ऐड करो|add kar|add product|add stock|update stock|नया सामान)/ui', $text);
-        $hasCustomerRelation = preg_match('/(को उधार|को दिया|को दिए|को दे दो|का बाकी|खाते में लिखो|खाते में जोड़ो|ने दिया|ने दिए|ने जमा किया|से मिला|से आए|से ले लिया|ग्राहक|customer|(?:to\s+(?!stock|inventory|store|shop)[a-z]+)|(?:for\s+(?!stock|inventory|store|shop)[a-z]+)|(?:from\s+[a-z]+)|(?:paid\s+by)|(?:credit\s+to)|(?:lent\s+to))/ui', $text);
-        $hasExplicitCustomerTx = preg_match('/(?:give\s+.+?\s*(?:to|for)|credit\s+(?:to|for)|lent\s+to|debit\s+to|paid\s+by|received\s+from|from\s+[a-z]+\s*paid|[a-z]+\s+paid|[a-z]+\s+gave|[a-z]+\s+deposited)/ui', $text);
+        $hasUdhaarKeywords = preg_match('/(उधार|udhar|udhaar|क्रेडिट|credit|lent|on credit|बाकी|खाते में लिख|लिख लो|लिख ले|लिख देना|लिख दो|को दे दो|को दिया|को दिए|का बाकी|का उधार)/ui', $text);
+        $hasJamaKeywords = preg_match('/(जमा|jama|paid|payment|pay|received|receive|got|collected|settled|पेमेंट|भुगतान|वसूल|चुकाया|खाता चुकता|ने दिए|ने दिया|ने जमा|से मिला|से मिले|से आया|से आए|से ले लिया|दे गया|दे गए|कैश मिला|पेमेंट आया|फोनपे|phonepe|gpay|गूगल पे|पेटीएम|paytm)/ui', $text);
+        $hasInventoryExplicitKeywords = preg_match('/(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/ui', $text);
 
-        // Check matching product in database
         $matchedProduct = null;
         foreach ($allProds as $p) {
             $pName = mb_strtolower(trim($p['name']), 'UTF-8');
@@ -1783,11 +1828,9 @@ try {
             }
         }
 
-        $isProductIntent = !$hasCustomerRelation && !$hasExplicitCustomerTx && (
-            $hasUnit ||
-            $hasProductKeywords ||
-            $hasInventoryAction ||
-            ($matchedProduct && preg_match('/(स्टॉक|भाव|रेट|पैकेट|किलो|लीटर|पीस|जोड़ो|कीमत|stock|price|rate|add)/ui', $text))
+        $isProductIntent = !$hasUdhaarKeywords && !$hasJamaKeywords && (
+            $hasInventoryExplicitKeywords ||
+            (preg_match('/(स्टॉक|stock)/ui', $text) && preg_match('/(जोड़ो|बढ़ाओ|update|add)/ui', $text))
         );
 
         // ----------------------------------------------------
@@ -1906,14 +1949,20 @@ try {
         // ----------------------------------------------------
         // CASE B: CUSTOMER LEDGER TRANSACTION (UDHAAR / JAMA)
         // ----------------------------------------------------
-        $textWithoutDays = preg_replace('/(\d+)\s*(दिन|din|days|mahina|mahine|महीने|महीना)/ui', ' ', $text);
+        $textWithoutDays = preg_replace('/(\d+)\s*(दिन|din|days|mahina|mahine|महीने|महीना|हफ्ता|hafta|week)/ui', ' ', $text);
         $amount = 0;
         if (preg_match('/(?:₹|रुपये|रुपया|rupaye|rupee|rupees|rs\.?)\s*(\d+(\.\d+)?)/ui', $textWithoutDays, $rM)) {
             $amount = (float)$rM[1];
         } elseif (preg_match('/(\d+(\.\d+)?)\s*(?:₹|रुपये|रुपया|rupaye|rupee|rupees|rs\.?)/ui', $textWithoutDays, $rM2)) {
             $amount = (float)$rM2[1];
-        } elseif (preg_match('/(\d+(\.\d+)?)/', $textWithoutDays, $rM3)) {
+        } elseif (preg_match('/(\d+(\.\d+)?)\s*(?:उधार|udhar|udhaar|जमा|jama|पेमेंट|paid|क्रेडिट|credit|लिखो|लिख लो|लिख दे|बाकी)/ui', $textWithoutDays, $rM3)) {
             $amount = (float)$rM3[1];
+        } else {
+            $cleanWithoutQty = preg_replace('/(\d+(\.\d+)?)\s*(?:पैकेट|packet|packets|pkt|pkts|किलो|किलोग्राम|kg|kilo|kilos|लीटर|ltr|litre|liter|पीस|piece|pieces|pcs|बोरी|bori|कार्टन|carton|पेटी|दर्जन|dozen|बोतल|bottle|ग्राम|gm)/ui', ' ', $textWithoutDays);
+            preg_match_all('/\d+(\.\d+)?/', $cleanWithoutQty, $rMAll);
+            if (!empty($rMAll[0])) {
+                $amount = (float)end($rMAll[0]);
+            }
         }
 
         if ($amount === 0) {

@@ -265,31 +265,157 @@ export const createSpeechRecognizer = (
   return recognition;
 };
 
+// Convert numeric digits into natural spoken Hindi words for 100% authentic, realistic Indian soundbox announcement
+export const numberToHindiWords = (num: number): string => {
+  num = Math.round(Number(num) || 0);
+  if (num <= 0) return 'शून्य';
+  if (num === 150) return 'डेढ़ सौ';
+  if (num === 250) return 'ढाई सौ';
+  if (num === 1500) return 'डेढ़ हज़ार';
+  if (num === 2500) return 'ढाई हज़ार';
+
+  const units = ['', 'एक', 'दो', 'तीन', 'चार', 'पाँच', 'छह', 'सात', 'आठ', 'नौ', 'दस',
+    'ग्यारह', 'बारह', 'तेरह', 'चौदह', 'पंद्रह', 'सोलह', 'सत्रह', 'अठारह', 'उन्नीस', 'बीस',
+    'इक्कीस', 'बाईस', 'तेईस', 'चौबीस', 'पच्चीस', 'छब्बीस', 'सत्ताईस', 'अट्ठाइस', 'उनतीस', 'तीस',
+    'इकतीस', 'बत्तीस', 'तैंतीस', 'चौंतीस', 'पैंतीस', 'छत्तीस', 'सैंतीस', 'अड़तीस', 'उनतालीस', 'चालीस',
+    'इकतालीस', 'बयालीस', 'तैंतालीस', 'चवालीस', 'पैंतालीस', 'छियालीस', 'सैंतालीस', 'अड़तालीस', 'उनचास', 'पचास',
+    'इक्यावन', 'बावन', 'तिरेपन', 'चौवन', 'पचपन', 'छप्पन', 'सत्तावन', 'अट्ठावन', 'उनसठ', 'साठ',
+    'इकसठ', 'बासठ', 'तिरेसठ', 'चौंसठ', 'पैंसठ', 'छियासठ', 'सरसठ', 'अड़सठ', 'उनहत्तर', 'सत्तर',
+    'इकहत्तर', 'बहत्तर', 'तिहत्तर', 'चौहत्तर', 'पचहत्तर', 'छिहत्तर', 'सतहत्तर', 'अठहत्तर', 'उनासी', 'अस्सी',
+    'इक्यासी', 'बयासी', 'तिरासी', 'चौरासी', 'पचासी', 'छियासी', 'सत्तासी', 'अट्ठासी', 'नवासी', 'नब्बे',
+    'इक्यानवे', 'बानवे', 'तिरानवे', 'चौरानवे', 'पंचानवे', 'छियानवे', 'सत्तानवे', 'अट्ठानवे', 'निन्यानवे'];
+
+  const parts: string[] = [];
+  if (num >= 10000000) {
+    const cr = Math.floor(num / 10000000);
+    parts.push(numberToHindiWords(cr) + ' करोड़');
+    num %= 10000000;
+  }
+  if (num >= 100000) {
+    const lk = Math.floor(num / 100000);
+    parts.push((units[lk] || numberToHindiWords(lk)) + ' लाख');
+    num %= 100000;
+  }
+  if (num >= 1000) {
+    const th = Math.floor(num / 1000);
+    parts.push((units[th] || numberToHindiWords(th)) + ' हज़ार');
+    num %= 1000;
+  }
+  if (num >= 100) {
+    const h = Math.floor(num / 100);
+    parts.push(units[h] + ' सौ');
+    num %= 100;
+  }
+  if (num > 0) {
+    parts.push(units[num] || String(num));
+  }
+  return parts.join(' ');
+};
+
+/**
+ * 🔔 Realistic Paytm / PhonePe Soundbox Signature Chime
+ * 4-tone harmonic bell chime with acoustic resonance
+ * Plays immediately before the voice announcement!
+ */
+export const playPaytmSoundboxChime = async (): Promise<void> => {
+  const ctx = getSharedAudioContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume();
+    } catch {}
+  }
+
+  return new Promise(resolve => {
+    try {
+      const now = ctx.currentTime;
+      // Paytm ascending harmonic sequence: Eb5 (622Hz) -> G5 (784Hz) -> Bb5 (932Hz) -> Eb6 (1244Hz)
+      const notes = [
+        { freq: 622.25, time: 0.00, dur: 0.13 },
+        { freq: 783.99, time: 0.09, dur: 0.13 },
+        { freq: 932.33, time: 0.18, dur: 0.14 },
+        { freq: 1244.51, time: 0.28, dur: 0.36 }
+      ];
+
+      notes.forEach(({ freq, time, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle'; // warm melodious bell harmonic
+        osc.frequency.setValueAtTime(freq, now + time);
+
+        gain.gain.setValueAtTime(0.001, now + time);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + time + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + time + dur);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + time);
+        osc.stop(now + time + dur + 0.05);
+      });
+
+      // Give 420ms for the melodic chime to resonate before voice announcement begins
+      setTimeout(resolve, 420);
+    } catch {
+      resolve();
+    }
+  });
+};
+
 // Dukaan Soundbox Voice Speaker (Paytm / PhonePe style) with onEnd callback support
-export const playSoundboxVoice = (text: string, enabled: boolean = true, onEnd?: () => void) => {
+export const playSoundboxVoice = async (
+  text: string,
+  enabled: boolean = true,
+  onEnd?: () => void,
+  options?: { skipChime?: boolean }
+) => {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) {
     if (typeof onEnd === 'function') {
-      setTimeout(onEnd, 300);
+      setTimeout(onEnd, 200);
     }
     return;
   }
 
   try {
+    // 1. Play authentic Paytm Soundbox Chime first unless explicitly disabled
+    if (!options?.skipChime) {
+      await playPaytmSoundboxChime();
+    }
+
     window.speechSynthesis.cancel();
 
-    // Clean text for natural Hindi & English pronunciation
-    // Replace ₹ symbol with 'रुपये' / 'rupees'
     const isEnText = !/[\u0900-\u097F]/.test(text) && /^[a-zA-Z0-9\s.,₹!?'"-]+$/.test(text);
-    let cleanText = text
-      .replace(/₹\s*([0-9,.]+)/g, isEnText ? '$1 rupees' : '$1 रुपये')
-      .replace(/Rs\.?\s*([0-9,.]+)/gi, isEnText ? '$1 rupees' : '$1 रुपये')
-      .replace(/\s+/g, ' ')
-      .trim();
+
+    // 2. Clean & convert currency/numbers into natural spoken Hindi/English words
+    let cleanText = text;
+    if (isEnText) {
+      cleanText = cleanText
+        .replace(/₹\s*([0-9,.]+)/g, '$1 rupees')
+        .replace(/Rs\.?\s*([0-9,.]+)/gi, '$1 rupees')
+        .replace(/\s+/g, ' ')
+        .trim();
+    } else {
+      // Natural Hindi soundbox speech:
+      // Replace "₹ 500" or "500 रुपये" with spoken words like "पाँच सौ रुपये"
+      cleanText = cleanText
+        .replace(/(?:₹\s*|Rs\.?\s*)([0-9,]+(?:\.[0-9]+)?)/gi, (_, val) => {
+          const n = parseFloat(val.replace(/,/g, ''));
+          return (isNaN(n) || n === 0) ? 'रुपये' : `${numberToHindiWords(n)} रुपये`;
+        })
+        .replace(/([0-9,]+(?:\.[0-9]+)?)\s*(?:रुपये|रुपया)/gi, (_, val) => {
+          const n = parseFloat(val.replace(/,/g, ''));
+          return (isNaN(n) || n === 0) ? 'रुपये' : `${numberToHindiWords(n)} रुपये`;
+        })
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = isEnText ? 'en-IN' : 'hi-IN';
-    utterance.rate = 0.95; // Slightly slower, calm cadence like PhonePe / Paytm soundbox
-    utterance.pitch = 1.05; // Friendly clear pitch
+    utterance.rate = 0.96; // Optimal conversational cadence of Paytm soundbox
+    utterance.pitch = 1.0; // Natural authentic pitch (not high/squeaky)
+    utterance.volume = 1.0;
 
     if (typeof onEnd === 'function') {
       utterance.onend = () => {
@@ -309,27 +435,32 @@ export const playSoundboxVoice = (text: string, enabled: boolean = true, onEnd?:
       if (!voices || voices.length === 0) return null;
 
       if (isEnText) {
-        // Find best Indian English voice
-        let enVoice = voices.find(v => (v.lang === 'en-IN' || v.name.includes('India')) && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online')));
+        let enVoice = voices.find(v => (v.lang === 'en-IN' || v.name.includes('India')) && 
+          (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Google') || v.name.includes('Neerja')));
         if (!enVoice) enVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india'));
         if (!enVoice) enVoice = voices.find(v => v.lang.startsWith('en'));
         return enVoice;
       }
 
-      // Priority 1: High-quality Google or Microsoft Hindi voices
+      // Priority 1: High quality Neural Hindi voices (Microsoft Swara / Madhur, Google Hindi)
       let bestVoice = voices.find(v => 
-        (v.lang === 'hi-IN' || v.lang.startsWith('hi')) && 
-        (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Kalpana') || v.name.includes('Hemant') || v.name.includes('Madhur') || v.name.includes('Swara'))
+        (v.lang === 'hi-IN' || v.lang.toLowerCase().startsWith('hi')) && 
+        (v.name.includes('Swara') || v.name.includes('Madhur') || v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Google') || v.name.includes('Kalpana'))
       );
 
-      // Priority 2: Any Hindi voice
+      // Priority 2: Any Hindi voice (including local Android TTS)
       if (!bestVoice) {
-        bestVoice = voices.find(v => v.lang.startsWith('hi') || v.name.toLowerCase().includes('hindi'));
+        bestVoice = voices.find(v => v.lang.toLowerCase().startsWith('hi') || v.name.toLowerCase().includes('hindi'));
       }
 
-      // Priority 3: Indian English voice as fallback
+      // Priority 3: Natural Indian English voice
       if (!bestVoice) {
-        bestVoice = voices.find(v => v.lang === 'en-IN' || v.name.includes('India'));
+        bestVoice = voices.find(v => (v.lang === 'en-IN' || v.name.includes('India')) && (v.name.includes('Natural') || v.name.includes('Online')));
+      }
+
+      // Priority 4: Standard Indian English voice
+      if (!bestVoice) {
+        bestVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india'));
       }
 
       return bestVoice;
@@ -341,7 +472,7 @@ export const playSoundboxVoice = (text: string, enabled: boolean = true, onEnd?:
       utterance.lang = selectedVoice.lang;
     }
 
-    // Workaround for Chrome voice loading lag
+    // Workaround for Chrome voice loading delay
     if (window.speechSynthesis.getVoices().length === 0) {
       window.speechSynthesis.onvoiceschanged = () => {
         const v = pickBestVoice();

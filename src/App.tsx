@@ -603,7 +603,9 @@ export default function App() {
         await fetchAllData();
         const c = customers.find(item => item.id === tx.customer_id);
         const cName = c ? c.name : 'ग्राहक';
-        const phrase = `${cName} के खाते में ₹${tx.amount} ${tx.type === 'udhaar' ? 'उधार' : 'जमा'} दर्ज हो गया है`;
+        const phrase = tx.type === 'jama'
+          ? `${cName} से ₹${tx.amount} प्राप्त हुए`
+          : `${cName} के खाते में ₹${tx.amount} उधार दर्ज हुआ`;
         playSoundboxVoice(phrase, soundboxEnabled);
         return;
       }
@@ -634,7 +636,9 @@ export default function App() {
       OfflineSyncEngine.enqueue('/api/transactions', 'POST', tx, `${cName} - ₹${tx.amount} ${tx.type === 'udhaar' ? 'उधार' : 'जमा'}`);
       setPendingSyncCount(OfflineSyncEngine.getQueue().length);
 
-      const phrase = `${cName} के खाते में ₹${tx.amount} ${tx.type === 'udhaar' ? 'उधार' : 'जमा'} ऑफलाइन सुरक्षित दर्ज हो गया है`;
+      const phrase = tx.type === 'jama'
+        ? `${cName} से ₹${tx.amount} ऑफलाइन प्राप्त हुए`
+        : `${cName} के खाते में ₹${tx.amount} उधार ऑफलाइन दर्ज हुआ`;
       playSoundboxVoice(phrase, soundboxEnabled);
     }
   };

@@ -326,7 +326,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
             playSoundboxVoice(resultData.confirmationSpeech, true, () => {
               // Once assistant finishes speaking question, start listening for "हाँ" or "Yes"
               startConfirmationListening();
-            });
+            }, { skipChime: true });
           } else {
             // If soundbox is muted, still activate listening for confirmation after brief pause
             setTimeout(() => {
@@ -377,8 +377,8 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
         });
 
         const speakText = isEn
-          ? `Recorded ${type === 'udhaar' ? 'credit' : 'payment'} of ${formatCurrency(amount)} for ${cName}.`
-          : `${cName} के खाते में ${formatCurrency(amount)} ${type === 'udhaar' ? 'उधार' : 'जमा'} दर्ज हो गया है`;
+          ? `Recorded ${type === 'udhaar' ? 'credit' : 'payment'} of ₹${amount} for ${cName}.`
+          : (type === 'jama' ? `${cName} से ₹${amount} प्राप्त हुए` : `${cName} के खाते में ₹${amount} उधार दर्ज हुआ`);
         playSoundboxVoice(speakText, soundboxEnabled);
       } else if (parsedData.intent === 'product') {
         const name = editProductName.trim() || parsedData.name || (isEn ? 'New Item' : 'नया सामान');

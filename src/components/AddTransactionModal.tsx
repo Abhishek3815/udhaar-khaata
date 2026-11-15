@@ -3,6 +3,7 @@ import { X, ArrowDownLeft, ArrowUpRight, Check, Camera, Image as ImageIcon, Tras
 import { Customer, ShopSettings } from '../types';
 import { compressImageFile } from '../utils/imageUtils';
 import { createSpeechRecognizer, isSpeechRecognitionSupported, playSoundboxVoice, generateTransactionWhatsAppSlip, formatTransactionDateTime, playMicChime, requestMicrophoneAccess } from '../utils/speech';
+import { parseSpokenDukaanVoice } from '../utils/offlineVoiceParser';
 import { BillImageModal } from './BillImageModal';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -133,49 +134,20 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   };
 
   const processVoiceInput = (text: string) => {
-    const clean = text.toLowerCase().trim();
-
-    // 1. Detect Amount
-    let extractedAmount = 0;
-    const numMatch = clean.match(/(\d+(\.\d+)?)/);
-    if (numMatch) {
-      extractedAmount = parseFloat(numMatch[1]);
-    } else if (/डेढ़ सौ|dedh sau/.test(clean)) extractedAmount = 150;
-    else if (/ढाई सौ|dhai sau/.test(clean)) extractedAmount = 250;
-    else if (/साढ़े तीन सौ/.test(clean)) extractedAmount = 350;
-    else if (/हजार|हज़ार/.test(clean)) extractedAmount = 1000;
-    else if (/सौ/.test(clean)) extractedAmount = 100;
+    const parsed = parseSpokenDukaanVoice(text, customer ? [customer] : []);
+    const extractedAmount = parsed.amount || 0;
+    const detectedType = parsed.type || type;
+    const detectedNote = parsed.notes || '';
 
     if (extractedAmount > 0) {
       setAmount(String(extractedAmount));
     }
-
-    // 2. Detect Type (udhaar vs jama)
-    const isUdhaar = /उधार|बाकी|लिखो|लिख लो|दिया|de do|udhar/.test(clean);
-    const isJama = /जमा|पेमेंट|मिला|आया|paid|jama|phonepe|gpay|paytm|cash|नकद/.test(clean);
-
-    let detectedType = type;
-    if (isJama && !isUdhaar) {
-      detectedType = 'jama';
-      setType('jama');
-    } else if (isUdhaar) {
-      detectedType = 'udhaar';
-      setType('udhaar');
-    }
-
-    // 3. Detect Notes
-    let detectedNote = '';
-    if (/phonepe|फोनपे/i.test(clean)) detectedNote = 'PhonePe ऑनलाइन';
-    else if (/gpay|गूगल पे/i.test(clean)) detectedNote = 'Google Pay';
-    else if (/paytm|पेटीएम/i.test(clean)) detectedNote = 'Paytm';
-    else if (/कैश|नकद|cash/i.test(clean)) detectedNote = 'नकद कैश';
-    else if (/आटा/i.test(clean)) detectedNote = 'आटा किराना';
-    else if (/तेल/i.test(clean)) detectedNote = 'तेल';
-    else if (/दाल/i.test(clean)) detectedNote = 'दाल';
-    else if (/राशन/i.test(clean)) detectedNote = 'राशन सामान';
-
+    setType(detectedType);
     if (detectedNote) {
       setNotes(detectedNote);
+    }
+    if (parsed.creditPeriodDays && parsed.creditPeriodDays > 0) {
+      setCreditPeriodDays(parsed.creditPeriodDays);
     }
 
     if (extractedAmount > 0) {
@@ -183,6 +155,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       if (soundboxEnabled) {
         playSoundboxVoice(`₹${extractedAmount} ${detectedType === 'udhaar' ? 'उधार' : 'जमा'} सेट हो गया`, true);
       }
+    } else {
+      setVoiceNotice(`सुना: "${text}"`);
     }
   };
 
