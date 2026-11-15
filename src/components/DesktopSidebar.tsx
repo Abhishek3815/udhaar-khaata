@@ -18,7 +18,8 @@ import {
   Share2,
   PlusCircle,
   HelpCircle,
-  Mic
+  Mic,
+  Rocket
 } from 'lucide-react';
 import { ShopSettings, DbStatus, Customer } from '../types';
 import { formatCurrency } from '../utils/speech';
@@ -40,6 +41,7 @@ interface DesktopSidebarProps {
   onOpenHotspotSync: () => void;
   onOpenMandiModal: () => void;
   onOpenVoice?: () => void;
+  onOpenSpeedBooster?: () => void;
   customers: Customer[];
   productsCount: number;
 }
@@ -61,6 +63,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
   onOpenHotspotSync,
   onOpenMandiModal,
   onOpenVoice,
+  onOpenSpeedBooster,
   customers,
   productsCount
 }) => {
@@ -336,6 +339,17 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Speed Booster / Clear Cache */}
+            {onOpenSpeedBooster && (
+              <button
+                onClick={onOpenSpeedBooster}
+                className="p-1.5 rounded-lg bg-amber-400/20 hover:bg-amber-400 text-amber-500 dark:text-amber-300 hover:text-slate-950 border border-amber-300/40 active:scale-95 transition-all shadow-2xs"
+                title={isEn ? '🚀 1-Click Speed Booster (Clear Cache & Cookies)' : '🚀 1-क्लिक स्पीड बूस्टर (कैश व कुकीज़ साफ़ करें)'}
+              >
+                <Rocket className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Theme Toggle Pill */}
             <button
               onClick={onToggleTheme}

@@ -13,7 +13,8 @@ import {
   Plus,
   Zap,
   ShieldCheck,
-  Bell
+  Bell,
+  Rocket
 } from 'lucide-react';
 import { DbStatus, ShopSettings } from '../types';
 
@@ -34,6 +35,7 @@ interface HeaderProps {
   onOpenHotspotSync?: () => void;
   onOpenAddCustomer?: () => void;
   onOpenQuickBill?: () => void;
+  onOpenSpeedBooster?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,7 +53,8 @@ export const Header: React.FC<HeaderProps> = ({
   pendingSyncCount = 0,
   onOpenHotspotSync,
   onOpenAddCustomer,
-  onOpenQuickBill
+  onOpenQuickBill,
+  onOpenSpeedBooster
 }) => {
   const isEn = lang === 'en';
   const isDark = theme === 'dark';
@@ -127,6 +130,17 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {soundboxEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
+
+          {/* 1-Click Speed Booster / Clear Cache */}
+          {onOpenSpeedBooster && (
+            <button
+              onClick={onOpenSpeedBooster}
+              className="p-2 rounded-xl bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-slate-950 border border-amber-300/40 transition-all active:scale-95 shadow-xs"
+              title={isEn ? '🚀 1-Click Speed Booster (Clear Cache & Cookies)' : '🚀 1-क्लिक स्पीड बूस्टर (कैश व कुकीज़ साफ़ करें)'}
+            >
+              <Rocket className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -266,6 +280,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               {soundboxEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
+
+            {/* Speed Booster */}
+            {onOpenSpeedBooster && (
+              <button
+                onClick={onOpenSpeedBooster}
+                className="p-2 rounded-xl bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-slate-950 border border-amber-300/40 transition-all active:scale-95 shadow-xs"
+                title={isEn ? 'Speed Booster' : 'कैश साफ़ करें'}
+              >
+                <Rocket className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Settings button */}
             {onOpenSettings && (

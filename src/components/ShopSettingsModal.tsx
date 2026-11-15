@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Store, User, Phone, Mail, MapPin, QrCode, Volume2, VolumeX, Check, Sparkles, Loader2, Cloud, Download, Upload, Copy, CheckCheck, RefreshCw, ChevronDown, ChevronUp, AlertCircle, ShieldCheck, Camera, Trash2, Image as ImageIcon, Users, Lock } from 'lucide-react';
+import { X, Store, User, Phone, Mail, MapPin, QrCode, Volume2, VolumeX, Check, Sparkles, Loader2, Cloud, Download, Upload, Copy, CheckCheck, RefreshCw, ChevronDown, ChevronUp, AlertCircle, ShieldCheck, Camera, Trash2, Image as ImageIcon, Users, Lock, Rocket } from 'lucide-react';
 import { ShopSettings } from '../types';
 import { playSoundboxVoice } from '../utils/speech';
 import { useLanguage } from '../context/LanguageContext';
+import { clearAppCacheAndBoostSpeed } from '../utils/systemOptimizer';
 
 interface ShopSettingsModalProps {
   isOpen: boolean;
@@ -802,6 +803,35 @@ export const ShopSettingsModal: React.FC<ShopSettingsModalProps> = ({
             >
               <Sparkles className="w-3 h-3 text-amber-500" />
               <span>{isEn ? 'Test Soundbox (Play Demo Voice)' : 'साउंडबॉक्स टेस्ट करें (Play Demo Voice)'}</span>
+            </button>
+          </div>
+
+          {/* Storage, Memory & Speed Booster Section */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+            <div className="flex items-center space-x-2">
+              <Rocket className="w-4 h-4 text-amber-500" />
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                {isEn ? 'Storage & Memory Optimizer' : 'डिवाइस स्पीड & कैशे कंट्रोल (Speed Booster)'}
+              </h4>
+            </div>
+
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {isEn
+                ? 'Fix app lagging, browser freezing, or memory accumulation by clearing cached assets and cookies in 1-click.'
+                : 'ऐप चलाते-चलाते हैंग या स्लो होने पर 1-क्लिक में सभी कैशे फ़ाइलें व कुकीज़ साफ़ करें और रैम खाली करें।'}
+            </p>
+
+            <button
+              type="button"
+              onClick={async () => {
+                await clearAppCacheAndBoostSpeed({ fullWipe: false });
+                alert(isEn ? '🚀 Cache & cookies cleared! Reloading smoothly...' : '🚀 कैशे और कुकीज़ साफ़ हो गईं! ऐप रीलोड हो रहा है...');
+                window.location.reload();
+              }}
+              className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-sm active:scale-98"
+            >
+              <Rocket className="w-4 h-4 text-amber-200" />
+              <span>{isEn ? '🚀 1-Click Speed Boost & Clear Cache' : '🚀 1-क्लिक स्पीड बूस्ट (कैश व कुकीज़ साफ़ करें)'}</span>
             </button>
           </div>
 

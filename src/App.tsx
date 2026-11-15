@@ -27,6 +27,7 @@ import { AuthEngine } from './utils/auth';
 import { playSoundboxVoice } from './utils/speech';
 import { findEquivalentCustomer, findEquivalentProduct, areNamesEquivalent } from './utils/bilingualMatcher';
 import { CustomerPassbookView } from './components/CustomerPassbookView';
+import { SpeedBoosterModal } from './components/SpeedBoosterModal';
 import { useLanguage } from './context/LanguageContext';
 
 const DEFAULT_SHOP_SETTINGS: ShopSettings = {
@@ -214,6 +215,7 @@ export default function App() {
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isShopSettingsOpen, setIsShopSettingsOpen] = useState(false);
+  const [isSpeedModalOpen, setIsSpeedModalOpen] = useState(false);
   const [mandiAlerts, setMandiAlerts] = useState<MandiAlert[]>([]);
   const [isMandiModalOpen, setIsMandiModalOpen] = useState(false);
   const [mandiPrefill, setMandiPrefill] = useState<any>(null);
@@ -969,6 +971,7 @@ export default function App() {
         isOnline={isOnline}
         pendingSyncCount={pendingSyncCount}
         onOpenHotspotSync={() => setIsHotspotModalOpen(true)}
+        onOpenSpeedBooster={() => setIsSpeedModalOpen(true)}
         onOpenMandiModal={() => {
           setMandiPrefill(null);
           setIsMandiModalOpen(true);
@@ -1039,6 +1042,7 @@ export default function App() {
           isOnline={isOnline}
           pendingSyncCount={pendingSyncCount}
           onOpenHotspotSync={() => setIsHotspotModalOpen(true)}
+          onOpenSpeedBooster={() => setIsSpeedModalOpen(true)}
           onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
           onOpenQuickBill={() => handleChangeTab('products')}
         />
@@ -1214,7 +1218,14 @@ export default function App() {
           onImpersonateStore={handleImpersonateStore}
         />
 
-        {/* 10. Database Installation Wizard Modal */}
+        {/* 10. Speed Booster & Cache Clear Modal */}
+        <SpeedBoosterModal
+          isOpen={isSpeedModalOpen}
+          onClose={() => setIsSpeedModalOpen(false)}
+          lang={lang}
+        />
+
+        {/* 11. Database Installation Wizard Modal */}
         {isInstallWizardOpen && (
           <InstallWizardModal
             isOpen={isInstallWizardOpen}
