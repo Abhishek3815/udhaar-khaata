@@ -1176,6 +1176,7 @@ export default function App() {
           }}
           customers={customers}
           products={products}
+          activeTab={activeTab}
         />
 
         {/* 2. Customer Ledger Details Modal */}

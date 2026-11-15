@@ -2,7 +2,7 @@
   "version": "2.5-saas-platform-complete",
   "backup_type": "FULL_PROJECT_MASTER_BACKUP",
   "is_platform_backup": true,
-  "timestamp": "2026-11-15T17:10:08.765Z",
+  "timestamp": "2026-11-15T17:25:07.688Z",
   "stats": {
     "total_shops": 2,
     "total_customers": 5,
@@ -456,14 +456,14 @@
         "name": "मैगी (MRP ₹20)",
         "category": "स्नैक्स/बिस्कुट",
         "unit": "पैकेट",
-        "purchase_price": "13.86",
-        "selling_price": "20.00",
+        "purchase_price": "14.00",
+        "selling_price": "17.00",
         "wholesale_price": "17.00",
-        "stock_quantity": "100.00",
+        "stock_quantity": "120.00",
         "min_stock_alert": "0.00",
         "barcode": "",
         "created_at": "2026-11-15T17:00:54.000Z",
-        "updated_at": "2026-11-15T17:10:05.000Z"
+        "updated_at": "2026-11-15T17:25:04.000Z"
       }
     ],
     "mandi_alerts": [],

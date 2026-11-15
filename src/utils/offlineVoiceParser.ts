@@ -109,7 +109,8 @@ function capitalizeWords(str: string): string {
 export function parseSpokenDukaanVoice(
   speechText: string,
   knownCustomers: Customer[] = [],
-  knownProducts: Product[] = []
+  knownProducts: Product[] = [],
+  preferredIntent?: 'transaction' | 'product'
 ): VoiceParseResult {
   const originalTrimmed = speechText.trim();
   // 1. Normalize Devanagari numerals (५०० -> 500) and Hindi number words (पांच सौ -> 500)
@@ -191,17 +192,31 @@ export function parseSpokenDukaanVoice(
   const candidateCustomers = findMatchingCustomers(clean, knownCustomers);
   const matchedExistingCust = candidateCustomers[0];
 
+  // Grocery units and common commodities
+  const hasGroceryUnits = /(?:पैकेट|packet|packets|pkt|pkts|किलो|किलोग्राम|kg|kilo|लीटर|ltr|litre|liter|पीस|piece|pieces|pcs|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतल|bottle|डब्बा|डिब्बा|पाउच|ग्राम|gm)/i.test(clean);
+  const hasCommonGroceryWords = /(?:मैगी|maggi|फॉर्च्यून|fortune|आशीर्वाद|ashirvaad|तेल|oil|रिफाइंड|सरसों|आटा|aata|चावल|rice|दाल|daal|चीनी|sugar|शक्कर|बिस्कुट|biscuit|पारले|साबुन|soap|सर्फ|surf|शैम्पू|shampoo|कोलगेट|colgate|पेस्ट|paste|चाय|tea|कॉफी|coffee|मसाला|masala|हल्दी|मिर्च|धनिया|नमक|salt|घी|ghee)/i.test(clean);
+  const hasProductGeneralWords = /(?:सामान|माल|स्टॉक|आइटम|प्रोडक्ट|इन्वेंट्री|item|product|stock|inventory|खरीद|बिक्री|रेट|भाव|mrp)/i.test(clean);
+
   // Intent decision:
-  // If user mentions customer OR Udhaar/Jama OR there's no explicit product keyword, treat as TRANSACTION
   let isTransactionIntent = false;
   if (hasUdhaarKeywords || hasJamaKeywords) {
     isTransactionIntent = true;
-  } else if (matchedExistingCust && !hasInventoryExplicitKeywords) {
+  } else if (preferredIntent === 'product') {
+    isTransactionIntent = false;
+  } else if (hasInventoryExplicitKeywords || hasStockActionOnly || isProductDelete || isProductInquiry || isProductReduce || isProductPriceUpdate || isProductStockAdd) {
+    isTransactionIntent = false;
+  } else if (matchedExistingProd && !matchedExistingCust) {
+    isTransactionIntent = false;
+  } else if (hasGroceryUnits || hasCommonGroceryWords || hasProductGeneralWords) {
+    if (!matchedExistingCust) {
+      isTransactionIntent = false;
+    } else {
+      isTransactionIntent = true;
+    }
+  } else if (matchedExistingCust) {
     isTransactionIntent = true;
-  } else if (hasInventoryExplicitKeywords || hasStockActionOnly) {
-    isTransactionIntent = false;
-  } else if (matchedExistingProd && !hasUdhaarKeywords && !hasJamaKeywords) {
-    isTransactionIntent = false;
+  } else if (preferredIntent === 'transaction') {
+    isTransactionIntent = true;
   } else {
     // Default to transaction for shopkeeper daily usage
     isTransactionIntent = true;

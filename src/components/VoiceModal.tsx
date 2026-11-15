@@ -16,6 +16,7 @@ interface VoiceModalProps {
   onOpenMandiAlert?: (prefill?: any) => void;
   customers?: Customer[];
   products?: Product[];
+  activeTab?: 'ledger' | 'products';
 }
 
 export const VoiceModal: React.FC<VoiceModalProps> = ({
@@ -26,11 +27,13 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   soundboxEnabled,
   onOpenMandiAlert,
   customers = [],
-  products = []
+  products = [],
+  activeTab = 'ledger'
 }) => {
   const { lang: appLang } = useLanguage();
   const isEn = appLang === 'en';
   const [inputMode, setInputMode] = useState<'voice' | 'text'>('voice');
+  const [voiceMode, setVoiceMode] = useState<'auto' | 'transaction' | 'product'>('auto');
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [manualText, setManualText] = useState('');
@@ -51,6 +54,12 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   useEffect(() => {
     setLang(appLang === 'en' ? 'en-IN' : 'hi-IN');
   }, [appLang]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setVoiceMode(activeTab === 'products' ? 'product' : 'auto');
+    }
+  }, [isOpen, activeTab]);
 
   const [billImage, setBillImage] = useState<string | null>(null);
   const [viewBillPreview, setViewBillPreview] = useState(false);
@@ -280,7 +289,8 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
     try {
       // ⚡ 1. INSTANT LOCAL CLIENT PARSER (0ms delay, 100% offline & real-time)
-      let resultData: VoiceParseResult | null = parseSpokenDukaanVoice(raw, customers, products);
+      const pref = voiceMode === 'product' ? 'product' : (voiceMode === 'transaction' ? 'transaction' : (activeTab === 'products' ? 'product' : undefined));
+      let resultData: VoiceParseResult | null = parseSpokenDukaanVoice(raw, customers, products, pref);
 
       // 2. If client parser was unsure, try server endpoint as secondary enhancement
       if (!resultData || resultData.intent === 'unknown' || (resultData.intent === 'transaction' && !resultData.amount)) {
@@ -486,6 +496,51 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
     handleConfirmSaveRef.current = handleConfirmSave;
   });
 
+  const handleSwitchParsedIntent = (targetIntent: 'transaction' | 'product') => {
+    clearAutoSaveCountdown();
+    if (targetIntent === 'product') {
+      setVoiceMode('product');
+      setParsedData(prev => prev ? {
+        ...prev,
+        intent: 'product',
+        productAction: 'add_stock',
+        name: editCustomerName || prev.customerName || (isEn ? 'New Product' : 'नया सामान'),
+        productName: editCustomerName || prev.customerName || (isEn ? 'New Product' : 'नया सामान'),
+        quantity: parseFloat(editAmount) || prev.amount || 10,
+        unit: editUnit || 'पैकेट',
+        sellingPrice: parseFloat(editSellingPrice) || 60,
+        purchasePrice: parseFloat(editPurchasePrice) || 50
+      } : null);
+      setEditProductName(editCustomerName || (isEn ? 'New Product' : 'नया सामान'));
+      setEditQuantity(editAmount || '10');
+      setEditProductAction('add_stock');
+    } else {
+      setVoiceMode('transaction');
+      setParsedData(prev => prev ? {
+        ...prev,
+        intent: 'transaction',
+        type: 'udhaar',
+        customerName: editProductName || prev.name || (isEn ? 'New Customer' : 'नया ग्राहक'),
+        amount: parseFloat(editQuantity) || prev.quantity || 0
+      } : null);
+      setEditCustomerName(editProductName || (isEn ? 'New Customer' : 'नया ग्राहक'));
+      setEditAmount(editQuantity || '');
+      setEditType('udhaar');
+    }
+  };
+
+  const handleSwitchMode = (newMode: 'auto' | 'transaction' | 'product') => {
+    clearAutoSaveCountdown();
+    setVoiceMode(newMode);
+    if (parsedData) {
+      if (newMode === 'product' && parsedData.intent !== 'product') {
+        handleSwitchParsedIntent('product');
+      } else if (newMode === 'transaction' && parsedData.intent !== 'transaction') {
+        handleSwitchParsedIntent('transaction');
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -539,6 +594,50 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
         {/* Content */}
         <div className="p-5 flex-1 overflow-y-auto space-y-4">
+          {/* Target Mode Selector: Auto vs Customer Ledger vs Product Inventory */}
+          {!successSaved && (
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-bold gap-1">
+              <button
+                type="button"
+                onClick={() => handleSwitchMode('auto')}
+                className={`flex-1 py-1.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  voiceMode === 'auto'
+                    ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-xs font-black'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{isEn ? '⚡ Smart Auto' : '⚡ स्मार्ट ऑटो'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSwitchParsedIntent('transaction')}
+                className={`flex-1 py-1.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  (parsedData ? parsedData.intent === 'transaction' : voiceMode === 'transaction')
+                    ? 'bg-emerald-600 text-white shadow-xs font-black'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>{isEn ? '👤 Customer (Khata)' : '👤 ग्राहक खाता (उधार/जमा)'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSwitchParsedIntent('product')}
+                className={`flex-1 py-1.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  (parsedData ? parsedData.intent === 'product' : voiceMode === 'product')
+                    ? 'bg-teal-600 text-white shadow-xs font-black'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>{isEn ? '📦 Store Product' : '📦 दुकान सामान (स्टॉक)'}</span>
+              </button>
+            </div>
+          )}
+
           {!parsedData && !successSaved && (
             <>
               {/* Top Switcher: 🎙️ बोलकर vs ⌨️ लिखकर */}
