@@ -1,0 +1,27 @@
+DirectoryIndex index.php index.html
+
+<IfModule mod_mime.c>
+  AddType application/javascript .js .mjs
+  AddType text/css .css
+  AddType application/json .json
+  AddType image/svg+xml .svg
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # 1. Route all /api/ requests to PHP backend
+  RewriteRule ^api/(.*)$ api/index.php [QSA,L]
+
+  # 2. Allow install.php directly
+  RewriteCond %{REQUEST_URI} ^/install\.php [NC]
+  RewriteRule ^ - [L]
+
+  # 3. If requested file or directory exists (index.html, CSS, JS, images, svgs), serve directly
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # 4. Otherwise route to index.php
+  RewriteRule ^ index.php [L]
+</IfModule>

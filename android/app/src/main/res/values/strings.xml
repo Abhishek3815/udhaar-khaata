@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Dukaan Khaata</string>
+    <string name="title_activity_main">Dukaan Khaata</string>
+    <string name="package_name">com.dukaan.khaata</string>
+    <string name="custom_url_scheme">com.dukaan.khaata</string>
+</resources>

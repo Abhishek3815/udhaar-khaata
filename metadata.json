@@ -1,0 +1,6 @@
+{
+  "name": "Dukaan Khaata & Stock Manager",
+  "description": "बोलकर उधार-जमा और प्रॉडक्ट खरीद/बिक्री मूल्य मैनेज करने वाला डिजिटल मुनीम और स्टॉक मैनेजर (MySQL सपोर्ट सहित)",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

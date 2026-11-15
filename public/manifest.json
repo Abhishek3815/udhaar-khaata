@@ -1,0 +1,18 @@
+{
+  "short_name": "दुकान खाता",
+  "name": "दुकान खाता एवं स्टॉक मैनेजर",
+  "description": "बोलकर उधार-जमा और प्रॉडक्ट खरीद/बिक्री मूल्य मैनेज करने वाला डिजिटल मुनीम",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f766e",
+  "theme_color": "#0f766e",
+  "display": "standalone",
+  "orientation": "portrait"
+}

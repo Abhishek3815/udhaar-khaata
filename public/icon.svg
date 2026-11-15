@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#134e4a" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#grad)"/>
+  <circle cx="256" cy="256" r="190" fill="#ffffff" opacity="0.1"/>
+  <!-- Shop Bag / Ledger Book Icon -->
+  <path d="M160 170 V140 C160 100 190 70 256 70 C322 70 352 100 352 140 V170" fill="none" stroke="#fbbf24" stroke-width="26" stroke-linecap="round"/>
+  <rect x="120" y="170" width="272" height="260" rx="30" fill="#ffffff"/>
+  <!-- Rupee Symbol -->
+  <path d="M220 225 H295 M220 260 H285 M220 225 H260 C285 225 295 240 295 260 C295 285 275 295 250 295 H225 L295 380" fill="none" stroke="#0f766e" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
