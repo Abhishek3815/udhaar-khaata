@@ -472,6 +472,75 @@ function getCustomerPassbookToken($id, $phone) {
     return substr(hash_hmac('sha256', "cust_{$id}_{$phone}", 'dukaan_khaata_secure_salt_789'), 0, 24);
 }
 
+// ========================================================
+// 00. /api/tts (Ultra-Realistic Studio Human Voice MP3 Endpoint)
+// ========================================================
+if ($resource === 'tts') {
+    $text = trim($_GET['text'] ?? '');
+    $lang = trim($_GET['lang'] ?? 'hi');
+    if (empty($text)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Text is required']);
+        exit;
+    }
+
+    $text = mb_substr($text, 0, 300, 'UTF-8');
+    $hash = md5($lang . '_' . $text);
+    $cacheDir = __DIR__ . '/cache/audio';
+    if (!is_dir($cacheDir)) {
+        @mkdir($cacheDir, 0777, true);
+    }
+    $cacheFile = $cacheDir . '/' . $hash . '.mp3';
+
+    header('Content-Type: audio/mpeg');
+    header('Cache-Control: public, max-age=604800');
+    header('Accept-Ranges: bytes');
+
+    if (file_exists($cacheFile) && filesize($cacheFile) > 0) {
+        readfile($cacheFile);
+        exit;
+    }
+
+    $ttsUrl = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=' . urlencode($lang) . '&q=' . urlencode($text);
+
+    $audioData = false;
+    if (function_exists('curl_init')) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $ttsUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $audioData = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($httpCode !== 200 || empty($audioData)) {
+            $audioData = false;
+        }
+    }
+
+    if (!$audioData) {
+        $ctx = stream_context_create([
+            'http' => [
+                'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n",
+                'timeout' => 5
+            ]
+        ]);
+        $audioData = @file_get_contents($ttsUrl, false, $ctx);
+    }
+
+    if ($audioData && strlen($audioData) > 0) {
+        @file_put_contents($cacheFile, $audioData);
+        echo $audioData;
+        exit;
+    }
+
+    http_response_code(502);
+    echo json_encode(['error' => 'TTS audio unavailable']);
+    exit;
+}
+
 try {
     // ========================================================
     // 0. /api/install/status (Checks whether install lock exists)

@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import os from 'os';
+import https from 'https';
 import { db } from './server/db.js';
 import { areNamesEquivalent } from './src/utils/bilingualMatcher.js';
 
@@ -1355,6 +1356,47 @@ app.post('/api/settings', async (req: Request, res: Response) => {
     res.json({ success: true, data: safeUpdated });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6.4. Ultra-Realistic Studio Human Voice MP3 Endpoint (100% Free, Zero Robotic Voice)
+app.get('/api/tts', async (req: Request, res: Response) => {
+  try {
+    const text = String(req.query.text || '').slice(0, 300).trim();
+    const lang = String(req.query.lang || 'hi').trim();
+    if (!text) {
+      return res.status(400).send('Text is required');
+    }
+
+    const hash = crypto.createHash('md5').update(`${lang}_${text}`).digest('hex');
+    const cacheDir = path.join(process.cwd(), 'cache', 'audio');
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+    const cacheFile = path.join(cacheDir, `${hash}.mp3`);
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+
+    if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 0) {
+      return fs.createReadStream(cacheFile).pipe(res);
+    }
+
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(text)}`;
+    https.get(ttsUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (proxyRes) => {
+      if (proxyRes.statusCode === 200) {
+        const fileStream = fs.createWriteStream(cacheFile);
+        proxyRes.pipe(fileStream);
+        proxyRes.pipe(res);
+      } else {
+        res.status(502).send('TTS upstream error');
+      }
+    }).on('error', (err) => {
+      console.warn('[TTS Proxy] Error:', err.message);
+      res.status(500).send('TTS network error');
+    });
+  } catch (err: any) {
+    res.status(500).send('TTS server error: ' + err.message);
   }
 });
 
