@@ -167,59 +167,77 @@ export function parseSpokenDukaanVoice(
   }
 
   // -------------------------------------------------------------------------
-  // 2. INTENT CLASSIFICATION: TRANSACTION vs PRODUCT
+  // 2. INTENT CLASSIFICATION: TRANSACTION vs PRODUCT (Foolproof Smart Auto)
   // -------------------------------------------------------------------------
-  // Transaction action indicators: UDHAAR & JAMA keywords
-  const hasUdhaarKeywords = /(उधार|udhar|udhaar|क्रेडिट|credit|lent|on credit|बाकी|खाते में लिख|लिख लो|लिख ले|लिख देना|लिख दो|को दे दो|को दिया|को दिए|का बाकी|का उधार|give.+?(?:credit|udhar)|lent to|debit|दे दिया|सामान दिया|ले गया)/i.test(clean);
-  const hasJamaKeywords = /(जमा|jama|paid|payment|pay|received|receive|got|collected|settled|पेमेंट|भुगतान|वसूल|चुकाया|खाता चुकता|ने दिए|ने दिया|ने जमा|से मिला|से मिले|से आया|से आए|से ले लिया|दे गया|दे गए|कैश मिला|पेमेंट आया|फोनपे|phonepe|gpay|गूगल पे|पेटीएम|paytm|ऑनलाइन मिला)/i.test(clean);
+  // 2.1 Customer Ledger Indicators (उधार, बाकी, जमा, पेमेंट, लेन-देन)
+  const hasUdhaarKeywords = /(उधार|udhar|udhaar|क्रेडिट|credit|lent|on credit|बाकी|baaki|खाते में लिख|खाते में|लिख लो|लिख ले|लिख देना|लिख दो|लिखे|लिखो|को दे दो|को दिया|को दिए|का बाकी|का उधार|give.+?(?:credit|udhar)|lent to|debit|दे दिया|सामान दिया|माल दिया|ले गया|चढ़ा दो|चढ़ाओ|डाल दो|लगा दो)/i.test(clean);
+  const hasJamaKeywords = /(जमा|jama|paid|payment|pay|received|receive|got|collected|settled|पेमेंट|भुगतान|वसूल|चुकाया|खाता चुकता|ने दिए|ने दिया|ने जमा|से मिला|से मिले|से आया|से आए|से ले लिया|दे गया|दे गए|कैश मिला|नकद मिला|पेमेंट आया|फोनपे|phonepe|gpay|गूगल पे|पेटीएम|paytm|upi|ऑनलाइन मिला)/i.test(clean);
+  const hasLedgerActionPhrases = /(?:को\s*\d|ने\s*\d|\d+\s*(?:दिए|दिया|मिला|मिले|चुकाए|भेजे|डाल दिए|आए|आया|लगा दो))/i.test(clean);
 
-  // Product Inventory Indicators
+  // 2.2 Product Inventory Indicators (स्टॉक, भाव, रेट, सेल, घटाओ, हटाओ)
   const isProductDelete = /(?:सामान|प्रोडक्ट|आइटम)?\s*(?:हटाओ|हटा\s*दो|हटाना|हटाएं|हटा\s*देना|डिलीट\s*करो|डिलीट\s*कर\s*दो|डिलीट|delete|remove)/i.test(clean);
   const isProductInquiry = /(?:कितना\s*स्टॉक|स्टॉक\s*बताओ|स्टॉक\s*कितना|कितना\s*माल|कितना\s*बचा|बचा\s*है|क्या\s*रेट|भाव\s*क्या|रेट\s*बताओ|भाव\s*बताओ|कीमत\s*क्या|how\s*much\s*stock|check\s*stock|price\s*check|check\s*price)/i.test(clean);
   const isProductReduce = /(?:बिका|बिक\s*गया|बेचा|बेच\s*दिया|कम\s*करो|कम\s*कर\s*दो|कम\s*करें|घटाओ|घटा\s*दो|घटाएं|सेल\s*हुआ|सेल\s*हो\s*गया|सेल\s*किया|निकल\s*गया|sold|reduce|deduct)/i.test(clean);
-  const isProductPriceUpdate = /(?:रेट\s*बदलो|भाव\s*बदलो|रेट\s*करो|भाव\s*करो|में\s*बेचेंगे|नया\s*रेट|नया\s*भाव|बिक्री\s*रेट|खरीद\s*रेट|update\s*price|change\s*rate|new\s*rate|बिक\s*रहा|bik\s*raha|बिक\s*रही|bik\s*rahi|बिक\s*रहा\s*ह|bik\s*raha\s*h|बिक\s*रही\s*ह|bik\s*rahi\s*h|बिक\s*रहा\s*है|bik\s*raha\s*hai|बिकेगा|bikega|चल\s*रहा|chal\s*raha|भाव\s*है|rate\s*hai|का\s*भाव|का\s*रेट|pr\s*kg|per\s*kg|प्रति\s*किलो|pr\s*ltr|per\s*ltr|प्रति\s*लीटर|pr\s*packet|per\s*packet|में\s*बिक|me\s*bik)/i.test(clean);
+  const isProductPriceUpdate = /(?:रेट\s*बदलो|भाव\s*बदलो|रेट\s*करो|भाव\s*करो|में\s*बेचेंगे|नया\s*रेट|नया\s*भाव|बिक्री\s*रेट|खरीद\s*रेट|update\s*price|change\s*rate|new\s*rate|बिक\s*रहा|bik\s*raha|बिक\s*रही|bik\s*rahi|बिक\s*रहा\s*ह|bik\s*raha\s*h|बिक\s*रही\s*ह|bik\s*rahi\s*h|बिक\s*रहा\s*है|bik\s*raha\s*hai|बिकेगा|bikega|चल\s*रहा|chal\s*raha|भाव\s*है|rate\s*hai|का\s*भाव|का\s*रेट|pr\s*kg|per\s*kg|प्रति\s*किलो|pr\s*ltr|per\s*ltr|प्रति\s*लीटर|pr\s*packet|per\s*packet|प्रति\s*पैकेट|में\s*बिक|me\s*bik)/i.test(clean);
   const isProductStockAdd = /(?:स्टॉक\s*में\s*जोड़ो|स्टॉक\s*जोड़ो|स्टॉक\s*बढ़ाओ|माल\s*आया|आया\s*है|नया\s*माल|स्टॉक\s*डालो|add\s*to\s*stock|add\s*stock|restock)/i.test(clean);
 
-  const hasInventoryExplicitKeywords = /(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/i.test(clean) ||
-    isProductDelete || isProductInquiry || isProductReduce || isProductPriceUpdate || isProductStockAdd;
-  const hasStockActionOnly = /(स्टॉक|stock)/i.test(clean) && !hasUdhaarKeywords && !hasJamaKeywords;
+  const hasInventoryExplicitVerbs = isProductDelete || isProductInquiry || isProductReduce || isProductPriceUpdate || isProductStockAdd ||
+    /(?:खरीद\s*रेट|बिक्री\s*रेट|थोक\s*भाव|थोक\s*रेट|स्टॉक\s*करो|add\s*to\s*stock|update\s*stock|नया\s*प्रोडक्ट|नया\s*सामान)/i.test(clean);
 
-  // Check if speech matches any known product name (detecting duplicates / multiple variants)
+  // Grocery physical measurement units (Packet, Kg, Litre, Bori, Carton, Bottle, Dozen, Piece, Gram)
+  const hasGroceryUnits = /(?:पैकेटों|पैकेट|packet|packets|pkt|pkts|किलोग्राम|किलो|kg|kilo|kilos|लीटरों|लीटर|ltr|litre|liter|liters|पीस|piece|pieces|pcs|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतलों|बोतल|bottle|bottles|डब्बा|डिब्बा|पाउच|ग्राम|gm)/i.test(clean);
+
+  // Common Kirana commodities (when spoken without a customer context)
+  const hasCommonGroceryWords = /(?:मैगी|maggi|फॉर्च्यून|fortune|आशीर्वाद|ashirvaad|रिफाइंड|सरसों|आटा|aata|चावल|rice|दाल|daal|चीनी|sugar|शक्कर|गुड़|gur|gud|jaggery|बिस्कुट|biscuit|पारले|साबुन|soap|सर्फ|surf|शैम्पू|shampoo|कोलगेट|colgate|पेस्ट|paste|चाय|tea|कॉफी|coffee|मसाला|masala|हल्दी|मिर्च|धनिया|नमक|salt|घी|ghee)/i.test(clean);
+
+  // Check matching entities from database
   const candidateProducts = findMatchingProducts(clean, knownProducts);
   const matchedExistingProd = candidateProducts[0];
 
-  // Check if speech matches any known customer name (detecting duplicates / identical names)
   const candidateCustomers = findMatchingCustomers(clean, knownCustomers);
   const matchedExistingCust = candidateCustomers[0];
 
-  // Grocery units and common commodities
-  const hasGroceryUnits = /(?:पैकेट|packet|packets|pkt|pkts|किलो|किलोग्राम|kg|kilo|लीटर|ltr|litre|liter|पीस|piece|pieces|pcs|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतल|bottle|डब्बा|डिब्बा|पाउच|ग्राम|gm)/i.test(clean);
-  const hasCommonGroceryWords = /(?:मैगी|maggi|फॉर्च्यून|fortune|आशीर्वाद|ashirvaad|तेल|oil|रिफाइंड|सरसों|आटा|aata|चावल|rice|दाल|daal|चीनी|sugar|शक्कर|गुड़|gur|gud|jaggery|बिस्कुट|biscuit|पारले|साबुन|soap|सर्फ|surf|शैम्पू|shampoo|कोलगेट|colgate|पेस्ट|paste|चाय|tea|कॉफी|coffee|मसाला|masala|हल्दी|मिर्च|धनिया|नमक|salt|घी|ghee)/i.test(clean);
-  const hasProductGeneralWords = /(?:सामान|माल|स्टॉक|आइटम|प्रोडक्ट|इन्वेंट्री|item|product|stock|inventory|खरीद|बिक्री|रेट|भाव|mrp)/i.test(clean);
+  // Pure customer ledger pattern: Contains a number and name, NO grocery units, NO product verbs
+  // e.g. "रमेश 500", "Mukesh 200", "सुरेश 300 रुपया", "अमित 1000"
+  const hasPureCustomerPattern = !hasGroceryUnits && !hasInventoryExplicitVerbs &&
+    /\b\d+(\.\d+)?\b/.test(clean) &&
+    !hasCommonGroceryWords;
 
-  // Intent decision:
-  let isTransactionIntent = false;
-  if (hasUdhaarKeywords || hasJamaKeywords) {
-    isTransactionIntent = true;
+  // 2.3 Comprehensive Disambiguation Scoring Engine
+  let customerScore = 0;
+  let productScore = 0;
+
+  if (hasUdhaarKeywords) customerScore += 12;
+  if (hasJamaKeywords) customerScore += 12;
+  if (hasLedgerActionPhrases) customerScore += 8;
+  if (matchedExistingCust) customerScore += 8;
+  if (hasPureCustomerPattern) customerScore += 7;
+
+  if (hasInventoryExplicitVerbs) productScore += 12;
+  if (hasGroceryUnits) productScore += 8;
+  if (matchedExistingProd && !matchedExistingCust) productScore += 8;
+  if (hasCommonGroceryWords && !matchedExistingCust) productScore += 6;
+
+  // Gentle bias if user intentionally selected a mode toggle (DO NOT hard-lock!)
+  if (preferredIntent === 'transaction') {
+    customerScore += 4;
   } else if (preferredIntent === 'product') {
+    productScore += 4;
+  }
+
+  // Final Decision
+  let isTransactionIntent = true;
+  if (productScore > customerScore) {
     isTransactionIntent = false;
-  } else if (hasInventoryExplicitKeywords || hasStockActionOnly || isProductDelete || isProductInquiry || isProductReduce || isProductPriceUpdate || isProductStockAdd) {
-    isTransactionIntent = false;
-  } else if (matchedExistingProd && !matchedExistingCust) {
-    isTransactionIntent = false;
-  } else if (hasGroceryUnits || hasCommonGroceryWords || hasProductGeneralWords) {
-    if (!matchedExistingCust) {
+  } else if (customerScore > productScore) {
+    isTransactionIntent = true;
+  } else {
+    // Tie breaker
+    if ((hasGroceryUnits || hasInventoryExplicitVerbs || (matchedExistingProd && !matchedExistingCust)) && !matchedExistingCust) {
       isTransactionIntent = false;
     } else {
       isTransactionIntent = true;
     }
-  } else if (matchedExistingCust) {
-    isTransactionIntent = true;
-  } else if (preferredIntent === 'transaction') {
-    isTransactionIntent = true;
-  } else {
-    // Default to transaction for shopkeeper daily usage
-    isTransactionIntent = true;
   }
 
   // -------------------------------------------------------------------------

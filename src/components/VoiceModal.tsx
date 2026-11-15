@@ -57,9 +57,9 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setVoiceMode(activeTab === 'products' ? 'product' : 'auto');
+      setVoiceMode('auto');
     }
-  }, [isOpen, activeTab]);
+  }, [isOpen]);
 
   const [billImage, setBillImage] = useState<string | null>(null);
   const [viewBillPreview, setViewBillPreview] = useState(false);
@@ -289,7 +289,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
     try {
       // ⚡ 1. INSTANT LOCAL CLIENT PARSER (0ms delay, 100% offline & real-time)
-      const pref = voiceMode === 'product' ? 'product' : (voiceMode === 'transaction' ? 'transaction' : (activeTab === 'products' ? 'product' : undefined));
+      const pref = voiceMode === 'auto' ? undefined : voiceMode;
       let resultData: VoiceParseResult | null = parseSpokenDukaanVoice(raw, customers, products, pref);
 
       // 2. If client parser was unsure, try server endpoint as secondary enhancement
@@ -499,32 +499,41 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   const handleSwitchParsedIntent = (targetIntent: 'transaction' | 'product') => {
     clearAutoSaveCountdown();
     if (targetIntent === 'product') {
-      setVoiceMode('product');
+      const amt = parseFloat(editAmount) || 0;
+      const initialQty = amt > 0 && amt <= 20 ? amt : 10;
+      const initialSell = amt > 20 ? amt : (parseFloat(editSellingPrice) || 60);
+      const initialBuy = Math.round(initialSell * 0.85);
+      const pName = editCustomerName || (isEn ? 'New Product' : 'नया सामान');
+
       setParsedData(prev => prev ? {
         ...prev,
         intent: 'product',
         productAction: 'add_stock',
-        name: editCustomerName || prev.customerName || (isEn ? 'New Product' : 'नया सामान'),
-        productName: editCustomerName || prev.customerName || (isEn ? 'New Product' : 'नया सामान'),
-        quantity: parseFloat(editAmount) || prev.amount || 10,
+        name: pName,
+        productName: pName,
+        quantity: initialQty,
         unit: editUnit || 'पैकेट',
-        sellingPrice: parseFloat(editSellingPrice) || 60,
-        purchasePrice: parseFloat(editPurchasePrice) || 50
+        sellingPrice: initialSell,
+        purchasePrice: initialBuy
       } : null);
-      setEditProductName(editCustomerName || (isEn ? 'New Product' : 'नया सामान'));
-      setEditQuantity(editAmount || '10');
+      setEditProductName(pName);
+      setEditQuantity(String(initialQty));
+      setEditSellingPrice(String(initialSell));
+      setEditPurchasePrice(String(initialBuy));
       setEditProductAction('add_stock');
     } else {
-      setVoiceMode('transaction');
+      const cName = editProductName || (isEn ? 'New Customer' : 'नया ग्राहक');
+      const amt = parseFloat(editSellingPrice) || parseFloat(editPurchasePrice) || parseFloat(editQuantity) || 0;
+
       setParsedData(prev => prev ? {
         ...prev,
         intent: 'transaction',
         type: 'udhaar',
-        customerName: editProductName || prev.name || (isEn ? 'New Customer' : 'नया ग्राहक'),
-        amount: parseFloat(editQuantity) || prev.quantity || 0
+        customerName: cName,
+        amount: amt
       } : null);
-      setEditCustomerName(editProductName || (isEn ? 'New Customer' : 'नया ग्राहक'));
-      setEditAmount(editQuantity || '');
+      setEditCustomerName(cName);
+      setEditAmount(amt ? String(amt) : '');
       setEditType('udhaar');
     }
   };
@@ -612,7 +621,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleSwitchParsedIntent('transaction')}
+                onClick={() => handleSwitchMode('transaction')}
                 className={`flex-1 py-1.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   (parsedData ? parsedData.intent === 'transaction' : voiceMode === 'transaction')
                     ? 'bg-emerald-600 text-white shadow-xs font-black'
@@ -625,7 +634,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleSwitchParsedIntent('product')}
+                onClick={() => handleSwitchMode('product')}
                 className={`flex-1 py-1.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   (parsedData ? parsedData.intent === 'product' : voiceMode === 'product')
                     ? 'bg-teal-600 text-white shadow-xs font-black'
@@ -886,6 +895,40 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           {/* EDITABLE PARSED RESULT CARD */}
           {parsedData && !successSaved && (
             <div className="p-4 sm:p-5 rounded-2xl bg-slate-100/95 dark:bg-slate-800/95 border border-slate-300/80 dark:border-slate-700 shadow-md space-y-3.5 animate-in zoom-in-95">
+              {/* ⚡ SMART AUTO INTENT INDICATOR WITH 1-CLICK TOGGLE */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 shadow-2xs">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400">
+                    {isEn ? '🤖 Smart Auto Detected:' : '🤖 ऑटो पहचान:'}
+                  </span>
+                  <span className={`font-black px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs ${
+                    parsedData.intent === 'transaction'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700'
+                      : 'bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300 border border-teal-300/60 dark:border-teal-700'
+                  }`}>
+                    {parsedData.intent === 'transaction' ? (
+                      <><BookOpen className="w-3.5 h-3.5" /> {isEn ? 'Customer Ledger (Khata)' : '👤 ग्राहक खाता (उधार/जमा)'}</>
+                    ) : (
+                      <><ShoppingBag className="w-3.5 h-3.5" /> {isEn ? 'Store Product (Stock)' : '📦 दुकान सामान (स्टॉक/रेट)'}</>
+                    )}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchParsedIntent(parsedData.intent === 'transaction' ? 'product' : 'transaction')}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-50 to-emerald-50 hover:from-teal-100 hover:to-emerald-100 dark:from-slate-800 dark:to-slate-850 dark:hover:from-slate-700 dark:hover:to-slate-750 text-teal-900 dark:text-teal-200 border border-teal-300/80 dark:border-teal-700 text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>
+                    {parsedData.intent === 'transaction'
+                      ? (isEn ? 'Switch to Store Product ⇄' : 'दुकान सामान में बदलें ⇄')
+                      : (isEn ? 'Switch to Customer Khata ⇄' : 'ग्राहक खाता में बदलें ⇄')
+                    }
+                  </span>
+                </button>
+              </div>
+
               {/* 1. Header Banner showing Confirmation Type */}
               <div className={`p-3.5 sm:p-4 rounded-2xl border shadow-xs flex items-center justify-between ${
                 parsedData.intent === 'transaction'
