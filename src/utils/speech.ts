@@ -331,10 +331,10 @@ export const playPaytmSoundboxChime = async (): Promise<void> => {
       const now = ctx.currentTime;
       // Paytm ascending harmonic sequence: Eb5 (622Hz) -> G5 (784Hz) -> Bb5 (932Hz) -> Eb6 (1244Hz)
       const notes = [
-        { freq: 622.25, time: 0.00, dur: 0.13 },
-        { freq: 783.99, time: 0.09, dur: 0.13 },
-        { freq: 932.33, time: 0.18, dur: 0.14 },
-        { freq: 1244.51, time: 0.28, dur: 0.36 }
+        { freq: 622.25, time: 0.00, dur: 0.10 },
+        { freq: 783.99, time: 0.07, dur: 0.10 },
+        { freq: 932.33, time: 0.14, dur: 0.11 },
+        { freq: 1244.51, time: 0.22, dur: 0.28 }
       ];
 
       notes.forEach(({ freq, time, dur }) => {
@@ -355,8 +355,8 @@ export const playPaytmSoundboxChime = async (): Promise<void> => {
         osc.stop(now + time + dur + 0.05);
       });
 
-      // Give 420ms for the melodic chime to resonate before voice announcement begins
-      setTimeout(resolve, 420);
+      // Snappy 320ms melodic chime before fast voice announcement begins
+      setTimeout(resolve, 320);
     } catch {
       resolve();
     }
@@ -464,7 +464,7 @@ const speakWithBrowserSpeechSynthesis = (
 
   const utterance = new SpeechSynthesisUtterance(finalText);
   utterance.lang = hasHindiVoice ? 'hi-IN' : (selectedVoice?.lang || 'en-IN');
-  utterance.rate = 0.94; // Consistent Paytm soundbox broadcast tempo across all devices
+  utterance.rate = 1.08; // Crisp, fast soundbox tempo
   utterance.pitch = 1.0; // Standard natural conversational pitch
   utterance.volume = 1.0;
 
@@ -588,6 +588,11 @@ export const playSoundboxVoice = async (
         const source = ctx.createBufferSource();
         source.buffer = audioBuf;
 
+        // Snappy, energetic Paytm soundbox tempo (1.10x speed)
+        try {
+          source.playbackRate.value = 1.10;
+        } catch {}
+
         // Soundbox acoustic resonance and volume boost for authentic Paytm clarity
         const gain = ctx.createGain();
         gain.gain.setValueAtTime(1.25, ctx.currentTime);
@@ -622,6 +627,9 @@ export const playSoundboxVoice = async (
           const audio = new Audio(ttsUrl);
           currentSoundboxAudio = audio;
           audio.volume = 1.0;
+          try {
+            audio.playbackRate = 1.10;
+          } catch {}
 
           let resolved = false;
           const markDone = (success: boolean) => {

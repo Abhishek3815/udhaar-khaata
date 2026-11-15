@@ -2,11 +2,11 @@
   "version": "2.5-saas-platform-complete",
   "backup_type": "FULL_PROJECT_MASTER_BACKUP",
   "is_platform_backup": true,
-  "timestamp": "2026-11-15T15:44:54.316Z",
+  "timestamp": "2026-11-15T16:06:26.530Z",
   "stats": {
     "total_shops": 2,
     "total_customers": 3,
-    "total_transactions": 12,
+    "total_transactions": 13,
     "total_products": 2,
     "total_mandi_alerts": 0
   },
@@ -265,6 +265,22 @@
         "deleted_reason": null,
         "deleted_by": null,
         "created_at": "2026-11-15T15:43:41.000Z"
+      },
+      {
+        "id": 13,
+        "shop_id": 2,
+        "customer_id": 5,
+        "type": "udhaar",
+        "amount": "100.00",
+        "notes": "उधार माल",
+        "bill_image": null,
+        "date": "2026-11-15",
+        "voice_recorded": 0,
+        "is_deleted": 0,
+        "deleted_at": null,
+        "deleted_reason": null,
+        "deleted_by": null,
+        "created_at": "2026-11-15T15:55:16.000Z"
       }
     ],
     "products": [
