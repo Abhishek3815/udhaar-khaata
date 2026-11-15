@@ -411,11 +411,81 @@ export const playSoundboxVoice = async (
         .trim();
     }
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = isEnText ? 'en-IN' : 'hi-IN';
-    utterance.rate = 0.96; // Optimal conversational cadence of Paytm soundbox
-    utterance.pitch = 1.0; // Natural authentic pitch (not high/squeaky)
+    const pickBestVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) return null;
+
+      if (isEnText) {
+        let enVoice = voices.find(v => (v.lang === 'en-IN' || v.name.includes('India')) && 
+          (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Google') || v.name.includes('Neerja')));
+        if (!enVoice) enVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india'));
+        if (!enVoice) enVoice = voices.find(v => v.lang.startsWith('en'));
+        return enVoice;
+      }
+
+      // Priority 1: High quality Indian Hindi voices (Google हिन्दी on Android/Chrome, Microsoft Swara on Windows, Lekha on iOS/Mac)
+      let bestVoice = voices.find(v => 
+        (v.lang === 'hi-IN' || v.lang.toLowerCase().startsWith('hi')) && 
+        (v.name.includes('Swara') || v.name.includes('Madhur') || v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Lekha') || v.name.includes('Kalpana'))
+      );
+
+      // Priority 2: Any Hindi voice (including local Android TTS)
+      if (!bestVoice) {
+        bestVoice = voices.find(v => v.lang.toLowerCase().startsWith('hi') || v.name.toLowerCase().includes('hindi'));
+      }
+
+      // Priority 3: Natural Indian English voice (fallback for devices without Hindi TTS)
+      if (!bestVoice) {
+        bestVoice = voices.find(v => (v.lang === 'en-IN' || v.name.includes('India')) && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Google')));
+      }
+
+      // Priority 4: Standard Indian English voice
+      if (!bestVoice) {
+        bestVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india') || v.name.toLowerCase().includes('rishi'));
+      }
+
+      return bestVoice;
+    };
+
+    const selectedVoice = pickBestVoice();
+    const hasHindiVoice = selectedVoice && selectedVoice.lang.toLowerCase().startsWith('hi');
+
+    // Cross-Device Voice Harmonization:
+    // If the device does not have a native Hindi TTS voice installed (e.g. some English-only Windows or Linux PCs),
+    // convert Devanagari to clean phonetic Romanized Hinglish so that the device's voice pronounces words naturally
+    // and sounds consistent with mobile and Paytm soundbox!
+    let finalText = cleanText;
+    if (!hasHindiVoice && !isEnText) {
+      finalText = cleanText
+        .replace(/खाता सुरक्षित रूप से लॉक कर दिया गया है/g, 'Khata surakshit roop se lock kar diya gaya hai')
+        .replace(/साउंडबॉक्स चालू है/g, 'Soundbox chaaloo hai')
+        .replace(/ऑफलाइन जोड़ दिया गया है/g, 'Offline jod diya gaya hai')
+        .replace(/से (.+) रुपये प्राप्त हुए/g, 'se $1 rupaye prapt hue')
+        .replace(/से (.+) रुपये जमा प्राप्त!/g, 'se $1 rupaye jama prapt')
+        .replace(/के खाते में (.+) रुपये उधार दर्ज!/g, 'ke khate me $1 rupaye udhaar darj')
+        .replace(/के खाते में (.+) रुपये उधार दर्ज हुआ/g, 'ke khate me $1 rupaye udhaar darj hua')
+        .replace(/का स्टॉक सेव हो गया है/g, 'ka stock save ho gaya hai')
+        .replace(/का स्टॉक सेव!/g, 'ka stock save')
+        .replace(/नये रेट सफलतापूर्वक इम्पोर्ट हो गए हैं/g, 'Naye rate safaltapoorvak import ho gaye hain')
+        .replace(/दुकान की सेटिंग्स सुरक्षित हो गई है/g, 'Dukaan ki settings surakshit ho gayi hai')
+        .replace(/पर (.+) रुपये प्राप्त हुए। धन्यवाद!/g, 'par $1 rupaye prapt hue. Dhanyavaad!')
+        .replace(/रुपये/g, 'rupaye')
+        .replace(/उधार/g, 'udhaar')
+        .replace(/जमा/g, 'jama')
+        .replace(/प्राप्त हुए/g, 'prapt hue')
+        .replace(/दर्ज हुआ/g, 'darj hua')
+        .replace(/सेव हो गया/g, 'save ho gaya');
+    }
+
+    const utterance = new SpeechSynthesisUtterance(finalText);
+    utterance.lang = hasHindiVoice ? 'hi-IN' : (selectedVoice?.lang || 'en-IN');
+    utterance.rate = 0.94; // Consistent Paytm soundbox broadcast tempo across all devices
+    utterance.pitch = 1.0; // Standard natural conversational pitch
     utterance.volume = 1.0;
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
 
     if (typeof onEnd === 'function') {
       utterance.onend = () => {
@@ -430,51 +500,19 @@ export const playSoundboxVoice = async (
       };
     }
 
-    const pickBestVoice = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (!voices || voices.length === 0) return null;
-
-      if (isEnText) {
-        let enVoice = voices.find(v => (v.lang === 'en-IN' || v.name.includes('India')) && 
-          (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Google') || v.name.includes('Neerja')));
-        if (!enVoice) enVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india'));
-        if (!enVoice) enVoice = voices.find(v => v.lang.startsWith('en'));
-        return enVoice;
-      }
-
-      // Priority 1: High quality Neural Hindi voices (Microsoft Swara / Madhur, Google Hindi)
-      let bestVoice = voices.find(v => 
-        (v.lang === 'hi-IN' || v.lang.toLowerCase().startsWith('hi')) && 
-        (v.name.includes('Swara') || v.name.includes('Madhur') || v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Google') || v.name.includes('Kalpana'))
-      );
-
-      // Priority 2: Any Hindi voice (including local Android TTS)
-      if (!bestVoice) {
-        bestVoice = voices.find(v => v.lang.toLowerCase().startsWith('hi') || v.name.toLowerCase().includes('hindi'));
-      }
-
-      // Priority 3: Natural Indian English voice
-      if (!bestVoice) {
-        bestVoice = voices.find(v => (v.lang === 'en-IN' || v.name.includes('India')) && (v.name.includes('Natural') || v.name.includes('Online')));
-      }
-
-      // Priority 4: Standard Indian English voice
-      if (!bestVoice) {
-        bestVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india'));
-      }
-
-      return bestVoice;
-    };
-
-    const selectedVoice = pickBestVoice();
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-      utterance.lang = selectedVoice.lang;
+    // Mobile Safari & Chrome auto-resume unblock
+    if (window.speechSynthesis.paused) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
     }
 
     // Workaround for Chrome voice loading delay
     if (window.speechSynthesis.getVoices().length === 0) {
-      window.speechSynthesis.onvoiceschanged = () => {
+      let spoken = false;
+      const speakOnce = () => {
+        if (spoken) return;
+        spoken = true;
         const v = pickBestVoice();
         if (v) {
           utterance.voice = v;
@@ -482,6 +520,8 @@ export const playSoundboxVoice = async (
         }
         window.speechSynthesis.speak(utterance);
       };
+      window.speechSynthesis.onvoiceschanged = speakOnce;
+      setTimeout(speakOnce, 200);
       return;
     }
 
