@@ -6,5 +6,6 @@ coverage/
 *.log
 cache/
 *.mp3
+*.zip
 .env*
 !.env.example
