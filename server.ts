@@ -347,6 +347,14 @@ function parseVoiceRuleBased(text: string, knownCustomers: { id: number; name: s
   // 3. CASE: PRODUCT / INVENTORY ENTRY
   // -------------------------------------------------------------------------
   if (isProductIntent) {
+    let matchedProductFromDb: any = null;
+    for (const p of knownProducts) {
+      if (p && p.name && (clean.includes(p.name.toLowerCase()) || areNamesEquivalent(clean, p.name))) {
+        matchedProductFromDb = p;
+        break;
+      }
+    }
+
     let unit = isEn ? 'Packet' : 'पैकेट';
     if (/किलो|किलोग्राम|kg|kilo/i.test(clean)) unit = isEn ? 'Kg' : 'किलो';
     else if (/लीटर|लीटरों|ltr|litre|liter/i.test(clean)) unit = isEn ? 'Liter' : 'लीटर';
