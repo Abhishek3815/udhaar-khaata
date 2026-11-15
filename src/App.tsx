@@ -712,29 +712,83 @@ export default function App() {
   };
 
   const handleSaveVoiceProduct = async (prod: {
+    id?: number;
     name: string;
     purchase_price: number;
     selling_price: number;
     unit: string;
     stock_quantity: number;
+    action?: 'add_stock' | 'reduce_stock' | 'update_price' | 'delete' | 'inquiry';
+    delta_quantity?: number;
   }) => {
     // Check if product exists in database in English or Hindi
-    const existingProd = findEquivalentProduct(prod.name, products);
-    const prodNameToSave = existingProd ? existingProd.name : prod.name;
+    const existingProd = prod.id 
+      ? products.find(p => p.id === prod.id)
+      : findEquivalentProduct(prod.name, products);
 
-    const res = await fetch('/api/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...prod,
-        id: existingProd ? existingProd.id : undefined,
-        name: prodNameToSave,
-        force_upsert: true
-      })
-    });
-    const data = await res.json();
-    if (!data.success) {
-      throw new Error(data.error || 'सामान सेव नहीं हो सका');
+    if (prod.action === 'delete') {
+      if (existingProd) {
+        const res = await fetch(`/api/products/${existingProd.id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'सामान हटाया नहीं जा सका');
+        await fetchAllData();
+        return;
+      } else {
+        throw new Error('सामान दुकान में दर्ज नहीं मिला');
+      }
+    }
+
+    if (prod.action === 'inquiry') {
+      return;
+    }
+
+    const prodNameToSave = existingProd ? existingProd.name : prod.name;
+    let finalStock = prod.stock_quantity;
+
+    if (existingProd) {
+      if (prod.action === 'add_stock') {
+        const delta = prod.delta_quantity !== undefined ? prod.delta_quantity : prod.stock_quantity;
+        finalStock = Number(existingProd.stock_quantity || 0) + delta;
+      } else if (prod.action === 'reduce_stock') {
+        const delta = prod.delta_quantity !== undefined ? prod.delta_quantity : prod.stock_quantity;
+        finalStock = Math.max(0, Number(existingProd.stock_quantity || 0) - delta);
+      } else if (prod.action === 'update_price') {
+        finalStock = Number(existingProd.stock_quantity || 0);
+      }
+
+      const res = await fetch(`/api/products/${existingProd.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: prodNameToSave,
+          purchase_price: prod.purchase_price,
+          selling_price: prod.selling_price,
+          unit: prod.unit || existingProd.unit,
+          stock_quantity: finalStock
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'सामान अपडेट नहीं हो सका');
+      }
+    } else {
+      // New product creation
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: prodNameToSave,
+          purchase_price: prod.purchase_price,
+          selling_price: prod.selling_price,
+          unit: prod.unit || 'पैकेट',
+          stock_quantity: finalStock,
+          force_upsert: true
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'सामान सेव नहीं हो सका');
+      }
     }
     await fetchAllData();
   };

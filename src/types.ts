@@ -125,6 +125,11 @@ export interface VoiceParseResult {
   notes?: string;
   name?: string;
   productName?: string;
+  productId?: number;
+  product?: Product;
+  productAction?: 'add_stock' | 'reduce_stock' | 'update_price' | 'delete' | 'inquiry';
+  currentStock?: number;
+  targetStock?: number;
   oldPrice?: number;
   newPrice?: number;
   wholesalePrice?: number;

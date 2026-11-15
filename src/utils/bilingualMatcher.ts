@@ -127,22 +127,15 @@ export function areNamesEquivalent(nameA: string, nameB: string): boolean {
 
   if (normA === normB) return true;
 
-  // 3. Substring / Prefix match for names with titles/surnames (length >= 3)
-  if (normA.length >= 3 && normB.length >= 3) {
-    if (normA.startsWith(normB) || normB.startsWith(normA) || normA.includes(normB) || normB.includes(normA)) {
-      return true;
-    }
-  }
-
-  // 4. Token-by-token check (e.g. "Ramesh" in "Ramesh Kumar")
-  const tokensA = cleanA.split(/[\s\(\)]+/).filter(t => t.length >= 3);
-  const tokensB = cleanB.split(/[\s\(\)]+/).filter(t => t.length >= 3);
+  // 3. Token-by-token check (e.g. "Ramesh" in "Ramesh Kumar")
+  const tokensA = cleanA.split(/[\s\(\)]+/).filter(t => t.length >= 2);
+  const tokensB = cleanB.split(/[\s\(\)]+/).filter(t => t.length >= 2);
 
   for (const tA of tokensA) {
     const normTA = phoneticNormalize(/[\u0900-\u097F]/.test(tA) ? devanagariToLatin(tA) : tA);
     for (const tB of tokensB) {
       const normTB = phoneticNormalize(/[\u0900-\u097F]/.test(tB) ? devanagariToLatin(tB) : tB);
-      if (normTA === normTB && normTA.length >= 3) {
+      if (normTA === normTB && normTA.length >= 2) {
         return true;
       }
     }
@@ -259,8 +252,8 @@ export function findMatchingProducts(queryOrSpeech: string, products: Product[])
 
   for (const p of products) {
     const pName = p.name.toLowerCase().trim();
-    // 1. Exact match or includes name
-    if (clean.includes(pName) || pName.includes(clean)) {
+    // 1. Speech contains full product name
+    if (clean === pName || clean.includes(pName)) {
       if (!seenIds.has(p.id)) {
         seenIds.add(p.id);
         matched.push(p);
@@ -268,7 +261,7 @@ export function findMatchingProducts(queryOrSpeech: string, products: Product[])
       continue;
     }
 
-    // 2. Bilingual equivalence
+    // 2. Bilingual equivalence of product name with speech
     if (areNamesEquivalent(p.name, clean)) {
       if (!seenIds.has(p.id)) {
         seenIds.add(p.id);
@@ -278,8 +271,9 @@ export function findMatchingProducts(queryOrSpeech: string, products: Product[])
     }
 
     // 3. Token match (e.g. "फॉर्च्यून" in "फॉर्च्यून तेल")
-    const tokens = pName.split(/[\s,.-]+/).filter(t => t.length >= 3);
+    const tokens = pName.split(/[\s,.-]+/).filter(t => t.length >= 2);
     for (const t of tokens) {
+      if (/^(का|की|के|में|को|से|है|था|सामान|आइटम)$/i.test(t)) continue;
       if (clean.includes(t) || areNamesEquivalent(t, clean)) {
         if (!seenIds.has(p.id)) {
           seenIds.add(p.id);

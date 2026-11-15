@@ -172,8 +172,15 @@ export function parseSpokenDukaanVoice(
   const hasUdhaarKeywords = /(उधार|udhar|udhaar|क्रेडिट|credit|lent|on credit|बाकी|खाते में लिख|लिख लो|लिख ले|लिख देना|लिख दो|को दे दो|को दिया|को दिए|का बाकी|का उधार|give.+?(?:credit|udhar)|lent to|debit|दे दिया|सामान दिया|ले गया)/i.test(clean);
   const hasJamaKeywords = /(जमा|jama|paid|payment|pay|received|receive|got|collected|settled|पेमेंट|भुगतान|वसूल|चुकाया|खाता चुकता|ने दिए|ने दिया|ने जमा|से मिला|से मिले|से आया|से आए|से ले लिया|दे गया|दे गए|कैश मिला|पेमेंट आया|फोनपे|phonepe|gpay|गूगल पे|पेटीएम|paytm|ऑनलाइन मिला)/i.test(clean);
 
-  // Product Inventory indicators
-  const hasInventoryExplicitKeywords = /(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/i.test(clean);
+  // Product Inventory Indicators
+  const isProductDelete = /(?:सामान|प्रोडक्ट|आइटम)?\s*(?:हटाओ|हटा\s*दो|हटाना|हटाएं|हटा\s*देना|डिलीट\s*करो|डिलीट\s*कर\s*दो|डिलीट|delete|remove)/i.test(clean);
+  const isProductInquiry = /(?:कितना\s*स्टॉक|स्टॉक\s*बताओ|स्टॉक\s*कितना|कितना\s*माल|कितना\s*बचा|बचा\s*है|क्या\s*रेट|भाव\s*क्या|रेट\s*बताओ|भाव\s*बताओ|कीमत\s*क्या|how\s*much\s*stock|check\s*stock|price\s*check|check\s*price)/i.test(clean);
+  const isProductReduce = /(?:बिका|बिक\s*गया|बेचा|बेच\s*दिया|कम\s*करो|कम\s*कर\s*दो|कम\s*करें|घटाओ|घटा\s*दो|घटाएं|सेल\s*हुआ|सेल\s*हो\s*गया|सेल\s*किया|निकल\s*गया|sold|reduce|deduct)/i.test(clean);
+  const isProductPriceUpdate = /(?:रेट\s*बदलो|भाव\s*बदलो|रेट\s*करो|भाव\s*करो|में\s*बेचेंगे|नया\s*रेट|नया\s*भाव|बिक्री\s*रेट|खरीद\s*रेट|update\s*price|change\s*rate|new\s*rate)/i.test(clean);
+  const isProductStockAdd = /(?:स्टॉक\s*में\s*जोड़ो|स्टॉक\s*जोड़ो|स्टॉक\s*बढ़ाओ|माल\s*आया|आया\s*है|नया\s*माल|स्टॉक\s*डालो|add\s*to\s*stock|add\s*stock|restock)/i.test(clean);
+
+  const hasInventoryExplicitKeywords = /(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/i.test(clean) ||
+    isProductDelete || isProductInquiry || isProductReduce || isProductPriceUpdate || isProductStockAdd;
   const hasStockActionOnly = /(स्टॉक|stock)/i.test(clean) && !hasUdhaarKeywords && !hasJamaKeywords;
 
   // Check if speech matches any known product name (detecting duplicates / multiple variants)
@@ -367,8 +374,21 @@ export function parseSpokenDukaanVoice(
   }
 
   // -------------------------------------------------------------------------
-  // 4. CASE: PRODUCT / INVENTORY ENTRY (Kharid & Bikri)
+  // 4. CASE: PRODUCT / INVENTORY ENTRY & MANAGEMENT
   // -------------------------------------------------------------------------
+  let productAction: 'add_stock' | 'reduce_stock' | 'update_price' | 'delete' | 'inquiry' = 'add_stock';
+  if (isProductDelete) {
+    productAction = 'delete';
+  } else if (isProductInquiry) {
+    productAction = 'inquiry';
+  } else if (isProductReduce) {
+    productAction = 'reduce_stock';
+  } else if (isProductPriceUpdate) {
+    productAction = 'update_price';
+  } else {
+    productAction = 'add_stock';
+  }
+
   // 4.1 Unit of measurement
   let unit = 'पैकेट';
   if (/किलो|किलोग्राम|kg|kilo/i.test(clean)) unit = 'किलो';
@@ -380,13 +400,24 @@ export function parseSpokenDukaanVoice(
   else if (/बोतल|bottle/i.test(clean)) unit = 'बोतल';
   else if (/ग्राम|gm|gram/i.test(clean)) unit = 'ग्राम';
 
-  // 4.2 Quantity (Stock to add)
-  let quantity = 10;
+  // 4.2 Quantity (Stock to add or reduce)
+  let quantity = 0;
   const qtyMatch = clean.match(/(\d+(\.\d+)?)\s*(?:पैकेट|packet|packets|pkt|pkts|किलो|kg|kgs|kilo|लीटर|ltr|litre|liter|पीस|pcs|piece|pieces|बोरी|bori|कार्टन|carton|पेटी|peti|दर्जन|dozen|बोतल|bottle|ग्राम|gm)/i) ||
-                   clean.match(/(?:स्टॉक|स्टॉक में|जोड़ो|जोड़ दो|add|add stock)\s*(\d+(\.\d+)?)/i) ||
-                   clean.match(/(\d+(\.\d+)?)\s*(?:स्टॉक|जोड़ो|जोड़ दो|add|in stock)/i);
+                   clean.match(/(?:स्टॉक|स्टॉक में|जोड़ो|जोड़ दो|add|add stock|कम करो|घटाओ|बिका|बेचा)\s*(\d+(\.\d+)?)/i) ||
+                   clean.match(/(\d+(\.\d+)?)\s*(?:स्टॉक|जोड़ो|जोड़ दो|add|in stock|बिका|बेचा|कम|घटाओ)/i);
   if (qtyMatch && qtyMatch[1]) {
     quantity = parseFloat(qtyMatch[1]);
+  } else if (productAction === 'reduce_stock' || productAction === 'add_stock') {
+    const bareNums = (clean.match(/\b\d+(\.\d+)?\b/g) || []).map(n => parseFloat(n));
+    if (bareNums.length > 0) {
+      quantity = bareNums[0];
+    }
+  }
+
+  if (quantity <= 0) {
+    if (productAction === 'reduce_stock') quantity = 1;
+    else if (productAction === 'add_stock') quantity = 10;
+    else quantity = 0;
   }
 
   // 4.3 Purchase Price & Selling Price
@@ -394,12 +425,20 @@ export function parseSpokenDukaanVoice(
   let sellingPrice = 0;
 
   const buyMatch = clean.match(/(?:खरीद|kharid|buy|buying|purchase|cost)\s*(?:रेट|मूल्य|भाव|rate|price|at|₹|rs\.?|रुपये)?\s*(\d+(\.\d+)?)/i);
-  const sellMatch = clean.match(/(?:बिक्री|bikri|sell|selling|sale|mrp|एमआरपी|बेचेंगे)\s*(?:रेट|मूल्य|भाव|rate|price|at|₹|rs\.?|रुपये)?\s*(\d+(\.\d+)?)/i);
+  const sellMatch = clean.match(/(?:बिक्री|bikri|sell|selling|sale|mrp|एमआरपी|बेचेंगे)\s*(?:रेट|मूल्य|भाव|rate|price|at|₹|rs\.?|रुपये)?\s*(\d+(\.\d+)?)/i) ||
+                    clean.match(/(\d+(\.\d+)?)\s*(?:में\s*बेचेंगे|का\s*बिक्री\s*रेट|का\s*रेट)/i);
 
   if (buyMatch && buyMatch[1]) purchasePrice = parseFloat(buyMatch[1]);
   if (sellMatch && sellMatch[1]) sellingPrice = parseFloat(sellMatch[1]);
 
-  if (purchasePrice === 0 && sellingPrice === 0) {
+  if (productAction === 'update_price' && purchasePrice === 0 && sellingPrice === 0) {
+    const nums = (clean.match(/\d+(\.\d+)?/g) || []).map(n => parseFloat(n));
+    if (nums.length > 0) {
+      sellingPrice = nums[nums.length - 1];
+    }
+  }
+
+  if (purchasePrice === 0 && sellingPrice === 0 && productAction === 'add_stock') {
     const allNumbers = (clean.match(/\d+(\.\d+)?/g) || []).map(n => parseFloat(n));
     const priceCandidates = allNumbers.filter(n => n !== quantity);
 
@@ -450,11 +489,27 @@ export function parseSpokenDukaanVoice(
       .replace(/(?:पैकेटों|पैकेट|किलोग्राम|किलो|लीटरों|लीटर|पीस|बोरी|कार्टन|पेटी|दर्जन|बोतल|ग्राम|डब्बा|डिब्बा|पाउच)/gi, '')
       .replace(/\b(?:buying|buy|purchase|cost|selling|sale|sell|mrp|price|rate|at)\b/gi, '')
       .replace(/(?:खरीद|kharid|बिक्री|bikri|एमआरपी|बेचेंगे|रेट|भाव|कीमत)/gi, '')
-      .replace(/\b(?:add\s+to\s+stock|add\s+stock|add|update|stock|item|product|new)\b/gi, '')
-      .replace(/(?:स्टॉक\s*में\s*जोड़ो|स्टॉक\s*जोड़ो|स्टॉक|जोड़ो|जोड़\s*दो|ऐड\s*करो|करो|कर\s*देना|डालो|डाल\s*दो|नया|सामान|प्रोडक्ट|आइटम)/gi, '')
-      .replace(/\b(?:of|in|to|the|and|for)\b/gi, '')
-      .replace(/(?:में|का|की|के|और|है|था|को|पर)/gi, '')
+      .replace(/\b(?:add\s+to\s+stock|add\s+stock|add|update|stock|item|product|new|deduct|reduce|sold|delete|remove)\b/gi, '')
+      .replace(/(?:स्टॉक\s*में\s*जोड़ो|स्टॉक\s*जोड़ो|स्टॉक\s*बढ़ाओ|स्टॉक|जोड़ो|जोड़\s*दो|ऐड\s*करो|करो|कर\s*देना|डालो|डाल\s*दो|नया|सामान|प्रोडक्ट|आइटम)/gi, '')
+      .replace(/(?:बिका|बिक\s*गया|बेचा|बेच\s*दिया|कम\s*करो|कम\s*कर\s*दो|कम\s*करें|घटाओ|घटा\s*दो|घटाएं|सेल\s*हुआ|सेल\s*हो\s*गया|सेल\s*किया|निकल\s*गया)/gi, '')
+      .replace(/(?:कितना\s*स्टॉक|स्टॉक\s*बताओ|स्टॉक\s*कितना|कितना\s*माल|कितना\s*बचा|बचा\s*है|क्या\s*रेट|भाव\s*क्या|रेट\s*बताओ|भाव\s*बताओ|कीमत\s*क्या)/gi, '')
+      .replace(/(?:हटाओ|हटा\s*दो|हटाना|हटाएं|डिलीट|हटा\s*देना)/gi, '')
+      .replace(/\b(?:of|in|to|the|and|for|is|are|how|much|what)\b/gi, '')
+      .replace(/(?:में|का|की|के|और|है|था|को|पर|बताओ|कितना|क्या)/gi, '')
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'₹?।]/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
+
+    if (prodName) {
+      const found = findEquivalentProduct(prodName, knownProducts);
+      if (found) {
+        matchedProd = found;
+        prodName = found.name;
+        if (purchasePrice === 0 || purchasePrice === 50) purchasePrice = Number(found.purchase_price) || purchasePrice;
+        if (sellingPrice === 0 || sellingPrice === 60) sellingPrice = Number(found.selling_price) || sellingPrice;
+        if (unit === 'पैकेट' && found.unit) unit = found.unit;
+      }
+    }
 
     if (!prodName || prodName.length < 2) {
       prodName = isEn ? 'New Product' : 'नया सामान';
@@ -473,12 +528,60 @@ export function parseSpokenDukaanVoice(
   else if (/बिस्कुट|मैगी|नूडल्स|नमकीन|चिप्स|चॉकलेट|biscuit|maggi|chips/i.test(prodName)) category = 'स्नैक्स व बिस्कुट';
   else if (/चाय|कॉफी|दूध|कोल्डड्रिंक|पानी|tea|coffee|milk/i.test(prodName)) category = 'पेय पदार्थ';
 
-  const confirmProductSpeech = isEn
-    ? `${prodName} (${quantity} ${unit}) saved.`
-    : `${prodName} (${quantity} ${unit}) का स्टॉक सेव!`;
+  // 4.6 Stock values
+  const currentStock = matchedProd ? Number(matchedProd.stock_quantity) || 0 : 0;
+  let targetStock = currentStock;
+
+  if (productAction === 'reduce_stock') {
+    targetStock = Math.max(0, currentStock - quantity);
+  } else if (productAction === 'add_stock') {
+    targetStock = currentStock + quantity;
+  } else {
+    targetStock = currentStock;
+  }
+
+  // 4.7 Confirmation speech
+  let confirmProductSpeech = '';
+  if (productAction === 'inquiry') {
+    if (matchedProd) {
+      confirmProductSpeech = isEn
+        ? `${matchedProd.name} stock is ${currentStock} ${unit}, selling at ₹${matchedProd.selling_price || sellingPrice}.`
+        : `${matchedProd.name} का स्टॉक ${currentStock} ${unit} बचा है, बिक्री रेट ₹${matchedProd.selling_price || sellingPrice} है।`;
+    } else {
+      confirmProductSpeech = isEn
+        ? `${prodName} is not found in inventory.`
+        : `${prodName} दुकान की इन्वेंट्री में नहीं मिला।`;
+    }
+  } else if (productAction === 'reduce_stock') {
+    confirmProductSpeech = isEn
+      ? `${quantity} ${unit} sold from ${prodName}. Remaining stock is ${targetStock} ${unit}.`
+      : `${prodName} से ${quantity} ${unit} बिका! अब बचा स्टॉक ${targetStock} ${unit} है।`;
+  } else if (productAction === 'update_price') {
+    confirmProductSpeech = isEn
+      ? `${prodName} selling rate updated to ₹${sellingPrice}.`
+      : `${prodName} का नया बिक्री रेट ₹${sellingPrice} अपडेट!`;
+  } else if (productAction === 'delete') {
+    confirmProductSpeech = isEn
+      ? `Confirm removal of ${prodName} from inventory.`
+      : `${prodName} को दुकान से हटाने की पुष्टि करें।`;
+  } else {
+    // add_stock
+    if (matchedProd) {
+      confirmProductSpeech = isEn
+        ? `Added ${quantity} ${unit} to ${prodName}. Total stock is ${targetStock} ${unit}.`
+        : `${prodName} में ${quantity} ${unit} नया स्टॉक जुड़ा! कुल स्टॉक ${targetStock} ${unit}।`;
+    } else {
+      confirmProductSpeech = isEn
+        ? `${prodName} (${quantity} ${unit}) saved.`
+        : `${prodName} (${quantity} ${unit}) का नया स्टॉक सेव!`;
+    }
+  }
 
   return {
     intent: 'product',
+    productAction,
+    productId: matchedProd ? matchedProd.id : undefined,
+    product: matchedProd,
     name: prodName,
     productName: prodName,
     category,
@@ -486,6 +589,8 @@ export function parseSpokenDukaanVoice(
     purchasePrice,
     sellingPrice,
     quantity,
+    currentStock,
+    targetStock,
     candidateProducts: candidateProducts.length > 1 ? candidateProducts : undefined,
     confidence: 0.98,
     confirmationSpeech: confirmProductSpeech

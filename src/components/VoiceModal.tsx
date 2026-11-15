@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, X, Sparkles, Check, ArrowRight, RefreshCw, ShoppingBag, BookOpen, AlertCircle, Camera, Trash2, ZoomIn, Edit3, ArrowUpRight, ArrowDownLeft, Keyboard, Clock, PlusCircle, Zap, PauseCircle, RotateCcw } from 'lucide-react';
+import { Mic, MicOff, X, Sparkles, Check, ArrowRight, RefreshCw, ShoppingBag, BookOpen, AlertCircle, Camera, Trash2, ZoomIn, Edit3, ArrowUpRight, ArrowDownLeft, Keyboard, Clock, PlusCircle, Zap, PauseCircle, RotateCcw, Tag, TrendingDown, Info } from 'lucide-react';
 import { VoiceParseResult, Customer, Product } from '../types';
 import { createSpeechRecognizer, isSpeechRecognitionSupported, playSoundboxVoice, formatCurrency, playMicChime, requestMicrophoneAccess } from '../utils/speech';
 import { parseSpokenDukaanVoice } from '../utils/offlineVoiceParser';
@@ -11,7 +11,7 @@ interface VoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveTransaction: (tx: { customer_id?: number; customer_name: string; type: 'udhaar' | 'jama'; amount: number; notes: string; bill_image?: string; credit_period_days?: number }) => Promise<void>;
-  onSaveProduct: (prod: { name: string; purchase_price: number; selling_price: number; unit: string; stock_quantity: number }) => Promise<void>;
+  onSaveProduct: (prod: { id?: number; name: string; purchase_price: number; selling_price: number; unit: string; stock_quantity: number; action?: 'add_stock' | 'reduce_stock' | 'update_price' | 'delete' | 'inquiry'; delta_quantity?: number }) => Promise<void>;
   soundboxEnabled: boolean;
   onOpenMandiAlert?: (prefill?: any) => void;
   customers?: Customer[];
@@ -68,6 +68,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
   const [editSellingPrice, setEditSellingPrice] = useState('');
   const [editUnit, setEditUnit] = useState('पैकेट');
   const [editQuantity, setEditQuantity] = useState('10');
+  const [editProductAction, setEditProductAction] = useState<'add_stock' | 'reduce_stock' | 'update_price' | 'delete' | 'inquiry'>('add_stock');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognizerRef = useRef<any>(null);
@@ -331,15 +332,22 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           }
         } else if (resultData.intent === 'product') {
           const pName = resultData.name || resultData.productName || 'नया सामान';
+          const pAction = resultData.productAction || 'add_stock';
+          setEditProductAction(pAction);
           setEditProductName(pName);
           setEditPurchasePrice(resultData.purchasePrice ? String(resultData.purchasePrice) : '50');
           setEditSellingPrice(resultData.sellingPrice ? String(resultData.sellingPrice) : '60');
-          setEditQuantity(resultData.quantity ? String(resultData.quantity) : '10');
+          setEditQuantity(resultData.quantity ? String(resultData.quantity) : (pAction === 'reduce_stock' ? '1' : '10'));
           setEditUnit(resultData.unit || 'पैकेट');
 
-          // ⚡ Start 2-second Auto-Save Countdown only if single unambiguous match
+          // 📢 If voice inquiry: instantly speak the exact stock and rate!
+          if (pAction === 'inquiry' && resultData.confirmationSpeech) {
+            playSoundboxVoice(resultData.confirmationSpeech, soundboxEnabled);
+          }
+
+          // ⚡ Start 2-second Auto-Save Countdown only if single unambiguous match AND NOT inquiry/delete
           const hasMultipleProducts = resultData.candidateProducts && resultData.candidateProducts.length > 1;
-          if (autoSaveEnabled && pName && pName !== 'नया सामान' && !hasMultipleProducts) {
+          if (autoSaveEnabled && pName && pName !== 'नया सामान' && !hasMultipleProducts && pAction !== 'inquiry' && pAction !== 'delete') {
             setCountdown(2);
             countdownTimerRef.current = setInterval(() => {
               setCountdown(prev => {
@@ -404,7 +412,8 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
         const purchase_price = parseFloat(editPurchasePrice) || Number(parsedData.purchasePrice) || 0;
         const selling_price = parseFloat(editSellingPrice) || Number(parsedData.sellingPrice) || 0;
         const unit = editUnit.trim() || parsedData.unit || (isEn ? 'Packet' : 'पैकेट');
-        const stock_quantity = parseFloat(editQuantity) || Number(parsedData.quantity) || 10;
+        const qty = parseFloat(editQuantity) || Number(parsedData.quantity) || 0;
+        const action = editProductAction || parsedData.productAction || 'add_stock';
 
         if (!name) {
           alert(isEn ? 'Please enter product name' : 'कृपया सामान का नाम दर्ज करें');
@@ -412,17 +421,53 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           return;
         }
 
+        if (action === 'inquiry') {
+          setSuccessSaved(true);
+          setTimeout(() => {
+            onClose();
+          }, 400);
+          return;
+        }
+
+        const existingStock = parsedData.currentStock ?? (parsedData.product ? Number(parsedData.product.stock_quantity) || 0 : 0);
+        let finalStock = existingStock;
+        if (action === 'add_stock') {
+          finalStock = existingStock + qty;
+        } else if (action === 'reduce_stock') {
+          finalStock = Math.max(0, existingStock - qty);
+        } else {
+          finalStock = existingStock;
+        }
+
         await onSaveProduct({
+          id: parsedData.productId || parsedData.product?.id,
           name,
           purchase_price,
           selling_price,
           unit,
-          stock_quantity
+          stock_quantity: finalStock,
+          delta_quantity: qty,
+          action
         });
 
-        const speakText = isEn
-          ? `Saved ${name} (${stock_quantity} ${unit}) buying ₹${purchase_price} and selling ₹${selling_price}.`
-          : `${name} (${stock_quantity} ${unit}) का स्टॉक सेव हो गया है`;
+        let speakText = '';
+        if (action === 'delete') {
+          speakText = isEn
+            ? `${name} has been removed from store.`
+            : `${name} दुकान से हटा दिया गया है`;
+        } else if (action === 'reduce_stock') {
+          speakText = isEn
+            ? `Deducted ${qty} ${unit} from ${name}. Remaining stock is ${finalStock} ${unit}.`
+            : `${name} से ${qty} ${unit} बिक्री दर्ज! अब बचा स्टॉक ${finalStock} ${unit} है`;
+        } else if (action === 'update_price') {
+          speakText = isEn
+            ? `Updated ${name} selling rate to ₹${selling_price}.`
+            : `${name} का बिक्री रेट ₹${selling_price} अपडेट हो गया`;
+        } else {
+          speakText = isEn
+            ? `Added ${qty} ${unit} to ${name}. Total stock is ${finalStock} ${unit}.`
+            : `${name} में ${qty} ${unit} नया स्टॉक सेव! कुल स्टॉक ${finalStock} ${unit}`;
+        }
         playSoundboxVoice(speakText, soundboxEnabled);
       }
 
@@ -1181,6 +1226,89 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                 </div>
               ) : parsedData.intent === 'product' ? (
                 <div className="space-y-3">
+                  {/* Action Selector Bar */}
+                  <div className="p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-1 text-[11px] font-bold overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setEditProductAction('add_stock');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all cursor-pointer ${
+                        editProductAction === 'add_stock'
+                          ? 'bg-teal-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <PlusCircle className="w-3 h-3" />
+                      <span>{isEn ? 'Add Stock' : 'स्टॉक जोड़ें (+)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setEditProductAction('reduce_stock');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all cursor-pointer ${
+                        editProductAction === 'reduce_stock'
+                          ? 'bg-amber-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <TrendingDown className="w-3 h-3" />
+                      <span>{isEn ? 'Deduct/Sale' : 'बिक्री / घटाएं (-)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setEditProductAction('update_price');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all cursor-pointer ${
+                        editProductAction === 'update_price'
+                          ? 'bg-indigo-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <Tag className="w-3 h-3" />
+                      <span>{isEn ? 'Change Rate' : 'रेट बदलें (₹)'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setEditProductAction('inquiry');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all cursor-pointer ${
+                        editProductAction === 'inquiry'
+                          ? 'bg-blue-600 text-white shadow-xs font-black'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <Info className="w-3 h-3" />
+                      <span>{isEn ? 'Stock Info' : 'स्टॉक जानकारी'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearAutoSaveCountdown();
+                        setEditProductAction('delete');
+                      }}
+                      className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all cursor-pointer ${
+                        editProductAction === 'delete'
+                          ? 'bg-rose-600 text-white shadow-xs font-black'
+                          : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                      }`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>{isEn ? 'Delete' : 'हटाएं'}</span>
+                    </button>
+                  </div>
+
                   {/* 📦 Multiple Matching Product Variants Disambiguation Card */}
                   {parsedData.candidateProducts && parsedData.candidateProducts.length > 1 && (
                     <div className="p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-300 dark:border-teal-700/80 rounded-2xl space-y-2">
@@ -1225,117 +1353,245 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     </div>
                   )}
 
-                  {/* Product Name (Editable) */}
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      {isEn ? 'Product Name*' : 'सामान / प्रोडक्ट का नाम*'}
-                    </label>
-                    <input
-                      type="text"
-                      value={editProductName}
-                      onFocus={clearAutoSaveCountdown}
-                      onChange={(e) => {
-                        clearAutoSaveCountdown();
-                        setEditProductName(e.target.value);
-                      }}
-                      placeholder={isEn ? 'e.g. Maggi, Sugar, Mustard Oil...' : 'उदा: मैगी, चीनी, फॉर्च्यून तेल...'}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-teal-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </div>
+                  {/* ACTION SPECIFIC CARD BODIES */}
+                  {editProductAction === 'inquiry' ? (
+                    /* ℹ️ INQUIRY CARD */
+                    <div className="p-3.5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-2 border-blue-300 dark:border-blue-700/80 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1.5 rounded-xl bg-blue-600 text-white">
+                            <Info className="w-4 h-4" />
+                          </span>
+                          <div>
+                            <span className="text-[10px] uppercase tracking-wider font-black text-blue-700 dark:text-blue-300">
+                              {isEn ? 'Stock & Rate Inquiry' : 'स्टॉक व रेट जानकारी'}
+                            </span>
+                            <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                              {editProductName}
+                            </h4>
+                          </div>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+                          (parsedData.currentStock || 0) > 5
+                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300'
+                            : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-200 border border-rose-300'
+                        }`}>
+                          {isEn ? 'Stock: ' : 'स्टॉक: '}{parsedData.currentStock ?? (parsedData.product?.stock_quantity || 0)} {editUnit}
+                        </span>
+                      </div>
 
-                  {/* Quantity & Unit Row */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        {isEn ? 'Stock Quantity*' : 'स्टॉक मात्रा (Quantity)*'}
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={editQuantity}
-                        onFocus={clearAutoSaveCountdown}
-                        onChange={(e) => {
-                          clearAutoSaveCountdown();
-                          setEditQuantity(e.target.value);
-                        }}
-                        placeholder="10"
-                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      />
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-blue-200 dark:border-slate-800">
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block">
+                            {isEn ? 'Selling Price' : 'बिक्री रेट (₹)'}
+                          </span>
+                          <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                            ₹{editSellingPrice} <span className="text-[10px] font-medium text-slate-500">/ {editUnit}</span>
+                          </span>
+                        </div>
+                        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-blue-200 dark:border-slate-800">
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block">
+                            {isEn ? 'Purchase Cost' : 'खरीद भाव (₹)'}
+                          </span>
+                          <span className="text-base font-black text-amber-600 dark:text-amber-400">
+                            ₹{editPurchasePrice} <span className="text-[10px] font-medium text-slate-500">/ {editUnit}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-blue-900 dark:text-blue-200 flex items-center justify-between">
+                        <span>📢 साउंडबॉक्स द्वारा आवाज में सुनाया गया है।</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearAutoSaveCountdown();
+                            setEditProductAction('add_stock');
+                          }}
+                          className="font-bold underline text-blue-700 dark:text-blue-300 hover:text-blue-900 cursor-pointer"
+                        >
+                          बदलें या नया स्टॉक जोड़ें ✏️
+                        </button>
+                      </div>
                     </div>
+                  ) : editProductAction === 'delete' ? (
+                    /* 🗑️ DELETE WARNING CARD */
+                    <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-700/80 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="p-2 rounded-xl bg-rose-600 text-white">
+                          <Trash2 className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <h4 className="text-xs font-black text-rose-950 dark:text-rose-200">
+                            {isEn ? 'Confirm Product Removal' : 'सामान हटाने की पुष्टि करें'}
+                          </h4>
+                          <p className="text-[11px] text-rose-800 dark:text-rose-300">
+                            {isEn ? 'Are you sure you want to delete ' : 'क्या आप '}<strong>{editProductName}</strong>{isEn ? ' from the shop catalog?' : ' को दुकान की इन्वेंट्री से हटाना चाहते हैं?'}
+                          </p>
+                        </div>
+                      </div>
 
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        {isEn ? 'Unit (इकाई)*' : 'इकाई (Unit)*'}
-                      </label>
-                      <select
-                        value={editUnit}
-                        onChange={(e) => {
-                          clearAutoSaveCountdown();
-                          setEditUnit(e.target.value);
-                        }}
-                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      >
-                        <option value="पैकेट">पैकेट (Packet)</option>
-                        <option value="किलो">किलो (Kg)</option>
-                        <option value="लीटर">लीटर (Ltr)</option>
-                        <option value="पीस">पीस (Piece)</option>
-                        <option value="बोरी">बोरी (Bori)</option>
-                        <option value="बोतल">बोतल (Bottle)</option>
-                        <option value="कार्टन">कार्टन (Carton)</option>
-                        <option value="दर्जन">दर्जन (Dozen)</option>
-                        <option value="ग्राम">ग्राम (Gram)</option>
-                      </select>
+                      <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-rose-200 dark:border-slate-800 text-[11px] flex items-center justify-between text-slate-600 dark:text-slate-400">
+                        <span>वर्तमान स्टॉक: <strong>{parsedData.currentStock ?? (parsedData.product?.stock_quantity || 0)} {editUnit}</strong></span>
+                        <span>बिक्री रेट: <strong>₹{editSellingPrice}</strong></span>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Purchase vs Selling Price (Editable) */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[11px] font-bold text-amber-800 dark:text-amber-300 block mb-1">
-                        {isEn ? 'Buy Price (₹)' : 'खरीद भाव (₹)'}
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-amber-600 dark:text-amber-400 font-bold text-xs">₹</span>
+                  ) : (
+                    /* 📦 ADD STOCK / REDUCE STOCK / UPDATE PRICE FORM */
+                    <>
+                      {/* Product Name (Editable) */}
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          {isEn ? 'Product Name*' : 'सामान / प्रोडक्ट का नाम*'}
+                        </label>
                         <input
-                          type="number"
-                          step="any"
-                          value={editPurchasePrice}
+                          type="text"
+                          value={editProductName}
                           onFocus={clearAutoSaveCountdown}
                           onChange={(e) => {
                             clearAutoSaveCountdown();
-                            setEditPurchasePrice(e.target.value);
+                            setEditProductName(e.target.value);
                           }}
-                          className="w-full pl-6 pr-2.5 py-1.5 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          placeholder={isEn ? 'e.g. Maggi, Sugar, Mustard Oil...' : 'उदा: मैगी, चीनी, फॉर्च्यून तेल...'}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-teal-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
                         />
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 block mb-1">
-                        {isEn ? 'Sell Price (₹)*' : 'बिक्री रेट (₹)*'}
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400 font-bold text-xs">₹</span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={editSellingPrice}
-                          onFocus={clearAutoSaveCountdown}
-                          onChange={(e) => {
-                            clearAutoSaveCountdown();
-                            setEditSellingPrice(e.target.value);
-                          }}
-                          className="w-full pl-6 pr-2.5 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs font-bold text-emerald-900 dark:text-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Matched product indicator */}
-                  {products?.some(p => p.name.toLowerCase().trim() === editProductName.toLowerCase().trim()) && (
-                    <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-[11px] text-teal-800 dark:text-teal-200 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
-                      <span>यह सामान पहले से आपकी दुकान में दर्ज है। नया स्टॉक जुड़ जाएगा।</span>
-                    </div>
+                      {/* Stock Calculation Preview Bar */}
+                      {editProductAction === 'reduce_stock' && (
+                        <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 text-xs space-y-1">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-amber-900 dark:text-amber-200">
+                            <span>वर्तमान स्टॉक: {parsedData.currentStock ?? (parsedData.product?.stock_quantity || 0)} {editUnit}</span>
+                            <span>बिका/कम: -{editQuantity || 0} {editUnit}</span>
+                          </div>
+                          <div className="pt-1 border-t border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs font-black text-amber-950 dark:text-amber-100">
+                            <span>नया बचा स्टॉक:</span>
+                            <span className="text-sm text-rose-600 dark:text-rose-400">
+                              {Math.max(0, (parsedData.currentStock ?? (parsedData.product?.stock_quantity || 0)) - parseFloat(editQuantity || '0'))} {editUnit}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {editProductAction === 'add_stock' && (parsedData.currentStock !== undefined || parsedData.product) && (
+                        <div className="p-2.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-300 dark:border-teal-700/80 text-xs space-y-1">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-teal-900 dark:text-teal-200">
+                            <span>वर्तमान स्टॉक: {parsedData.currentStock ?? (parsedData.product?.stock_quantity || 0)} {editUnit}</span>
+                            <span>नया माल: +{editQuantity || 0} {editUnit}</span>
+                          </div>
+                          <div className="pt-1 border-t border-teal-200 dark:border-teal-800 flex items-center justify-between text-xs font-black text-teal-950 dark:text-teal-100">
+                            <span>कुल नया स्टॉक होगा:</span>
+                            <span className="text-sm text-emerald-600 dark:text-emerald-400">
+                              {(parsedData.currentStock ?? (parsedData.product?.stock_quantity || 0)) + parseFloat(editQuantity || '0')} {editUnit}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quantity & Unit Row */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            {editProductAction === 'reduce_stock'
+                              ? (isEn ? 'Qty to Deduct*' : 'कम करने की मात्रा*')
+                              : editProductAction === 'update_price'
+                              ? (isEn ? 'Current Stock' : 'वर्तमान स्टॉक')
+                              : (isEn ? 'Stock Quantity*' : 'स्टॉक मात्रा (Quantity)*')}
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            value={editQuantity}
+                            onFocus={clearAutoSaveCountdown}
+                            onChange={(e) => {
+                              clearAutoSaveCountdown();
+                              setEditQuantity(e.target.value);
+                            }}
+                            placeholder="10"
+                            className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            {isEn ? 'Unit (इकाई)*' : 'इकाई (Unit)*'}
+                          </label>
+                          <select
+                            value={editUnit}
+                            onChange={(e) => {
+                              clearAutoSaveCountdown();
+                              setEditUnit(e.target.value);
+                            }}
+                            className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                          >
+                            <option value="पैकेट">पैकेट (Packet)</option>
+                            <option value="किलो">किलो (Kg)</option>
+                            <option value="लीटर">लीटर (Ltr)</option>
+                            <option value="पीस">पीस (Piece)</option>
+                            <option value="बोरी">बोरी (Bori)</option>
+                            <option value="बोतल">बोतल (Bottle)</option>
+                            <option value="कार्टन">कार्टन (Carton)</option>
+                            <option value="दर्जन">दर्जन (Dozen)</option>
+                            <option value="ग्राम">ग्राम (Gram)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Purchase vs Selling Price (Editable) */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="text-[11px] font-bold text-amber-800 dark:text-amber-300 block mb-1">
+                            {isEn ? 'Buy Price (₹)' : 'खरीद भाव (₹)'}
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-amber-600 dark:text-amber-400 font-bold text-xs">₹</span>
+                            <input
+                              type="number"
+                              step="any"
+                              value={editPurchasePrice}
+                              onFocus={clearAutoSaveCountdown}
+                              onChange={(e) => {
+                                clearAutoSaveCountdown();
+                                setEditPurchasePrice(e.target.value);
+                              }}
+                              className="w-full pl-6 pr-2.5 py-1.5 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 block mb-1">
+                            {isEn ? 'Sell Price (₹)*' : 'बिक्री रेट (₹)*'}
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400 font-bold text-xs">₹</span>
+                            <input
+                              type="number"
+                              step="any"
+                              value={editSellingPrice}
+                              onFocus={clearAutoSaveCountdown}
+                              onChange={(e) => {
+                                clearAutoSaveCountdown();
+                                setEditSellingPrice(e.target.value);
+                              }}
+                              className="w-full pl-6 pr-2.5 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs font-bold text-emerald-900 dark:text-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Matched product indicator */}
+                      {products?.some(p => p.name.toLowerCase().trim() === editProductName.toLowerCase().trim()) && (
+                        <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-[11px] text-teal-800 dark:text-teal-200 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                          <span>
+                            {editProductAction === 'reduce_stock'
+                              ? 'सामान मिला — स्टॉक में से मात्रा कम हो जाएगी।'
+                              : editProductAction === 'update_price'
+                              ? 'सामान मिला — नया बिक्री व खरीद रेट अपडेट हो जाएगा।'
+                              : 'यह सामान पहले से आपकी दुकान में दर्ज है। नया स्टॉक जुड़ जाएगा।'}
+                          </span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ) : parsedData.intent === 'mandi_alert' ? (
@@ -1390,6 +1646,14 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                         ? editType === 'jama'
                           ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 shadow-emerald-900/30'
                           : 'bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 shadow-rose-900/30'
+                        : editProductAction === 'delete'
+                        ? 'bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 shadow-rose-900/30'
+                        : editProductAction === 'reduce_stock'
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-700 hover:to-orange-800 shadow-amber-900/30'
+                        : editProductAction === 'inquiry'
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 shadow-blue-900/30'
+                        : editProductAction === 'update_price'
+                        ? 'bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 shadow-teal-900/30'
                         : 'bg-gradient-to-r from-teal-600 to-cyan-700 hover:from-teal-700 hover:to-cyan-800 shadow-teal-900/30'
                     }`}
                   >
@@ -1397,7 +1661,15 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                     <span>
                       {parsedData.intent === 'transaction'
                         ? (editType === 'jama' ? (isEn ? 'Confirm & Record Payment ⚡' : 'हाँ, सही है — जमा दर्ज करें ⚡') : (isEn ? 'Confirm & Record Udhaar ⚡' : 'हाँ, सही है — उधार दर्ज करें ⚡'))
-                        : (isEn ? 'Confirm & Save Stock ⚡' : 'हाँ, सही है — स्टॉक सेव करें ⚡')}
+                        : editProductAction === 'delete'
+                        ? (isEn ? 'Yes, Remove Product 🗑️' : 'हाँ, सामान हटाएं 🗑️')
+                        : editProductAction === 'reduce_stock'
+                        ? (isEn ? 'Confirm & Deduct Stock 📉' : 'हाँ, सही है — स्टॉक घटाएं 📉')
+                        : editProductAction === 'inquiry'
+                        ? (isEn ? 'Got it, Thanks 👍' : 'ठीक है, धन्यवाद 👍')
+                        : editProductAction === 'update_price'
+                        ? (isEn ? 'Confirm & Update Rate 🏷️' : 'हाँ, सही है — नया रेट अपडेट करें 🏷️')
+                        : (isEn ? 'Confirm & Save Stock ⚡' : 'हाँ, सही है — स्टॉक जोड़ें ⚡')}
                     </span>
                   </button>
 
