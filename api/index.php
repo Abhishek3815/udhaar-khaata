@@ -144,6 +144,92 @@ function ensureMultiTenantSchema($pdo) {
 
 ensureMultiTenantSchema($pdo);
 
+// Bilingual English <-> Hindi Phonetic Matcher (Prevents duplicate customers/products)
+function devanagariToLatinPHP($str) {
+    static $map = [
+        'अ'=>'a', 'आ'=>'aa', 'इ'=>'i', 'ई'=>'ee', 'उ'=>'u', 'ऊ'=>'oo',
+        'ए'=>'e', 'ऐ'=>'ai', 'ओ'=>'o', 'औ'=>'au',
+        'क'=>'k', 'ख'=>'kh', 'ग'=>'g', 'घ'=>'gh',
+        'च'=>'ch', 'छ'=>'chh', 'ज'=>'j', 'झ'=>'jh',
+        'ट'=>'t', 'ठ'=>'th', 'ड'=>'d', 'ढ'=>'dh', 'ण'=>'n',
+        'त'=>'t', 'थ'=>'th', 'द'=>'d', 'ध'=>'dh', 'न'=>'n',
+        'प'=>'p', 'फ'=>'f', 'ब'=>'b', 'भ'=>'bh', 'म'=>'m',
+        'य'=>'y', 'र'=>'r', 'ल'=>'l', 'व'=>'v',
+        'श'=>'sh', 'ष'=>'sh', 'स'=>'s', 'ह'=>'h',
+        'ा'=>'a', 'ि'=>'i', 'ी'=>'i', 'ु'=>'u', 'ू'=>'u',
+        'े'=>'e', 'ै'=>'ai', 'ो'=>'o', 'ौ'=>'au', 'ं'=>'n', 'ँ'=>'n', '्'=>'',
+        'ॉ'=>'o', 'ॅ'=>'e'
+    ];
+    $consonants = 'कखगघचछजझटठडढणतथदधनपफबभमयरलवशषसह';
+    $chars = preg_split('//u', (string)$str, -1, PREG_SPLIT_NO_EMPTY);
+    $out = '';
+    $len = count($chars);
+    for ($i = 0; $i < $len; $i++) {
+        $ch = $chars[$i];
+        $next = ($i + 1 < $len) ? $chars[$i + 1] : '';
+        if (isset($map[$ch])) {
+            $out .= $map[$ch];
+            if (mb_strpos($consonants, $ch) !== false && $next !== '' && mb_strpos($consonants, $next) !== false) {
+                $out .= 'a';
+            }
+        } else {
+            $out .= $ch;
+        }
+    }
+    return strtolower((string)preg_replace('/[^a-zA-Z0-9\s]/', '', $out));
+}
+
+function phoneticNormalizePHP($str) {
+    $s = strtolower((string)preg_replace('/[^a-zA-Z0-9]/', '', (string)$str));
+    $s = str_replace(['ee', 'oo', 'aa', 'sh', 'w', 'ph'], ['i', 'u', 'a', 's', 'v', 'f'], $s);
+    return (string)preg_replace('/(.)\\1+/', '$1', $s);
+}
+
+function areNamesEquivalentPHP($a, $b) {
+    if (empty($a) || empty($b)) return false;
+    $cleanA = trim(mb_strtolower((string)$a, 'UTF-8'));
+    $cleanB = trim(mb_strtolower((string)$b, 'UTF-8'));
+    if ($cleanA === $cleanB) return true;
+
+    $dict = [
+        [['sugar', 'chini', 'cheeni', 'shakkar'], ['चीनी', 'शक्कर']],
+        [['oil', 'tel', 'mustard', 'sarson', 'refined'], ['तेल', 'सरसों तेल', 'रिफाइंड']],
+        [['salt', 'namak'], ['नमक', 'टाटा नमक']],
+        [['flour', 'atta', 'aata', 'wheat'], ['आटा', 'गेहूं का आटा']],
+        [['rice', 'chawal'], ['चावल']],
+        [['maggi', 'maggie'], ['मैगी', 'मैगी नूडल्स']],
+        [['fortune'], ['फॉर्च्यून']],
+        [['biscuit', 'biscuits'], ['बिस्कुट', 'बिस्किट']],
+        [['soap', 'sabun'], ['साबुन']],
+        [['surf', 'detergent'], ['सर्फ', 'डिटर्जेंट']],
+        [['tea', 'chai'], ['चाय']],
+        [['milk', 'doodh'], ['दूध']]
+    ];
+    foreach ($dict as $pair) {
+        $matchAEn = false; foreach ($pair[0] as $e) { if (strpos($cleanA, $e) !== false) $matchAEn = true; }
+        $matchBHi = false; foreach ($pair[1] as $h) { if (mb_strpos($cleanB, $h) !== false) $matchBHi = true; }
+        if ($matchAEn && $matchBHi) return true;
+
+        $matchAHi = false; foreach ($pair[1] as $h) { if (mb_strpos($cleanA, $h) !== false) $matchAHi = true; }
+        $matchBEn = false; foreach ($pair[0] as $e) { if (strpos($cleanB, $e) !== false) $matchBEn = true; }
+        if ($matchAHi && $matchBEn) return true;
+    }
+
+    $latA = preg_match('/[\x{0900}-\x{097F}]/u', (string)$a) ? devanagariToLatinPHP($a) : $cleanA;
+    $latB = preg_match('/[\x{0900}-\x{097F}]/u', (string)$b) ? devanagariToLatinPHP($b) : $cleanB;
+
+    $normA = phoneticNormalizePHP($latA);
+    $normB = phoneticNormalizePHP($latB);
+
+    if ($normA === $normB) return true;
+    if (strlen($normA) >= 3 && strlen($normB) >= 3) {
+        if (str_starts_with($normA, $normB) || str_starts_with($normB, $normA) || strpos($normA, $normB) !== false || strpos($normB, $normA) !== false) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Fast debounced auto-sync trigger to Google Drive on new store entries (Non-blocking)
 function triggerStoreAutoBackupOnEntryPHP($pdo, $shopId) {
     if (!$pdo || empty($shopId)) return;
@@ -548,12 +634,25 @@ try {
             $stmtCheck->execute($checkParams);
             $existingCust = $stmtCheck->fetch();
 
+            // Check bilingual English <-> Hindi customer equivalence
+            if (!$existingCust) {
+                $allCustStmt = $pdo->prepare("SELECT id, name, phone FROM customers WHERE shop_id = ?");
+                $allCustStmt->execute([$shopId]);
+                $allShopCusts = $allCustStmt->fetchAll();
+                foreach ($allShopCusts as $sc) {
+                    if (areNamesEquivalentPHP($sc['name'], $name)) {
+                        $existingCust = $sc;
+                        break;
+                    }
+                }
+            }
+
             if ($existingCust) {
                 http_response_code(409);
                 $isPhoneMatch = !empty($phone) && strlen($phone) >= 10 && !empty($existingCust['phone']) && preg_replace('/[^0-9]/', '', $existingCust['phone']) === $phone;
                 $errMsg = $isPhoneMatch
                     ? "इस मोबाइल नंबर ({$phone}) का ग्राहक पहले से मौजूद है: \"{$existingCust['name']}\""
-                    : "\"{$name}\" नाम का ग्राहक खाता पहले से मौजूद है! कृपया पहचान हेतु उपनाम जोड़ें।";
+                    : "\"{$name}\" ({$existingCust['name']}) नाम का ग्राहक खाता पहले से मौजूद है!";
                 echo json_encode([
                     'success' => false,
                     'duplicate' => true,
@@ -697,11 +796,18 @@ try {
                 exit;
             }
 
-            // If customer_id is missing (e.g. from Voice input), match by name or auto-create customer in this shop
+            // If customer_id is missing (e.g. from Voice input), match by name or bilingual equivalent or auto-create
             if (!$customerId && !empty($customerName)) {
-                $cFind = $pdo->prepare("SELECT id, name, phone FROM customers WHERE shop_id = ? AND (name = ? OR name LIKE ?)");
-                $cFind->execute([$shopId, $customerName, $customerName . '%']);
-                $foundCust = $cFind->fetch();
+                $cFind = $pdo->prepare("SELECT id, name, phone FROM customers WHERE shop_id = ?");
+                $cFind->execute([$shopId]);
+                $allCusts = $cFind->fetchAll();
+                $foundCust = null;
+                foreach ($allCusts as $c) {
+                    if (areNamesEquivalentPHP($c['name'], $customerName)) {
+                        $foundCust = $c;
+                        break;
+                    }
+                }
                 if ($foundCust) {
                     $customerId = (int)$foundCust['id'];
                 } else {
@@ -869,6 +975,17 @@ try {
                 $pSt = $pdo->prepare("SELECT id, name, unit, selling_price FROM products WHERE shop_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND LOWER(TRIM(unit)) = LOWER(TRIM(?)) LIMIT 1");
                 $pSt->execute([$shopId, $pName, $pUnit]);
                 $pExist = $pSt->fetch();
+            }
+            if (!$pExist && !empty($pName)) {
+                $allPSt = $pdo->prepare("SELECT id, name, unit, selling_price FROM products WHERE shop_id = ?");
+                $allPSt->execute([$shopId]);
+                $existingProds = $allPSt->fetchAll();
+                foreach ($existingProds as $ep) {
+                    if (areNamesEquivalentPHP($ep['name'], $pName)) {
+                        $pExist = $ep;
+                        break;
+                    }
+                }
             }
 
             if ($pExist && !$forceUpsert) {

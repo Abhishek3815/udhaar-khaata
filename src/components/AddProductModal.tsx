@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Package, Check, TrendingUp, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Product } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { areNamesEquivalent, findEquivalentProduct } from '../utils/bilingualMatcher';
 
 interface AddProductModalProps {
   isOpen: boolean;
@@ -76,9 +77,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const cleanUnit = unit.trim().toLowerCase();
 
   const matchedDuplicateProduct = (!isEditing && cleanName.length >= 2)
-    ? existingProducts?.find(
-        p => p.name.trim().toLowerCase() === cleanName && (p.unit || '').trim().toLowerCase() === cleanUnit
-      )
+    ? (findEquivalentProduct(name.trim(), existingProducts || []) ||
+       existingProducts?.find(
+         p => areNamesEquivalent(p.name, name)
+       ))
     : null;
 
   const handleSubmit = async (e: React.FormEvent) => {

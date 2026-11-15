@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { Customer, Transaction, Product, MandiAlert, ShopSettings, DbStatus } from '../src/types';
+import { areNamesEquivalent } from '../src/utils/bilingualMatcher';
 
 export type { Customer, Transaction, Product, MandiAlert, ShopSettings, DbStatus };
 
@@ -586,15 +587,25 @@ class DatabaseManager {
       checkParams.push(cleanName);
 
       const [existing]: any = await this.pool.query(checkSql, checkParams);
-      if (existing && existing.length > 0) {
-        const found = existing[0];
-        const isPhoneMatch = cleanPhone && cleanPhone.length >= 10 && found.phone && found.phone.replace(/[^0-9]/g, '') === cleanPhone;
+      let foundDuplicate = existing && existing.length > 0 ? existing[0] : null;
+
+      // Check bilingual English <-> Hindi customer equivalence
+      if (!foundDuplicate) {
+        const [allCusts]: any = await this.pool.query('SELECT id, name, phone FROM customers WHERE shop_id = ?', [shopId]);
+        const bilingualMatch = (allCusts || []).find((c: any) => areNamesEquivalent(c.name, cleanName));
+        if (bilingualMatch) {
+          foundDuplicate = bilingualMatch;
+        }
+      }
+
+      if (foundDuplicate) {
+        const isPhoneMatch = cleanPhone && cleanPhone.length >= 10 && foundDuplicate.phone && foundDuplicate.phone.replace(/[^0-9]/g, '') === cleanPhone;
         const errMsg = isPhoneMatch
-          ? `इस मोबाइल नंबर (${cleanPhone}) का खाता पहले से मौजूद है: "${found.name}"`
-          : `"${cleanName}" नाम का ग्राहक खाता पहले से मौजूद है! कृपया पहचान के लिए उपनाम जोड़ें (उदा. ${cleanName} (मास्टर जी))।`;
+          ? `इस मोबाइल नंबर (${cleanPhone}) का खाता पहले से मौजूद है: "${foundDuplicate.name}"`
+          : `"${cleanName}" (${foundDuplicate.name}) नाम का ग्राहक खाता पहले से मौजूद है! कृपया पहचान के लिए उपनाम जोड़ें (उदा. ${cleanName} (मास्टर जी))।`;
         const err: any = new Error(errMsg);
         err.isDuplicate = true;
-        err.existingId = found.id;
+        err.existingId = foundDuplicate.id;
         throw err;
       }
 
@@ -942,6 +953,12 @@ class DatabaseManager {
           [shopId, cleanName, unit]
         );
         if (nRows && nRows.length > 0) existingProd = nRows[0];
+      }
+      // Check bilingual English <-> Hindi product equivalence
+      if (!existingProd) {
+        const [allProds]: any = await this.pool.query('SELECT * FROM products WHERE shop_id = ?', [shopId]);
+        const bilingualProd = (allProds || []).find((p: any) => areNamesEquivalent(p.name, cleanName));
+        if (bilingualProd) existingProd = bilingualProd;
       }
 
       if (existingProd) {

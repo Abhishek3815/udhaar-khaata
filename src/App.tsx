@@ -25,6 +25,7 @@ import { HotspotSyncModal } from './components/HotspotSyncModal';
 import { OfflineSyncEngine } from './utils/offlineSync';
 import { AuthEngine } from './utils/auth';
 import { playSoundboxVoice } from './utils/speech';
+import { findEquivalentCustomer, findEquivalentProduct, areNamesEquivalent } from './utils/bilingualMatcher';
 import { CustomerPassbookView } from './components/CustomerPassbookView';
 import { useLanguage } from './context/LanguageContext';
 
@@ -660,19 +661,20 @@ export default function App() {
       calculatedDueDate = d.toISOString().split('T')[0];
     }
 
-    // Check if customer exists in current loaded list (case-insensitive)
-    const cleanSpoken = tx.customer_name.toLowerCase().trim();
-    const existingCust = customers.find(c => {
-      const cName = c.name.toLowerCase().trim();
-      return cName === cleanSpoken || cName.includes(cleanSpoken) || cleanSpoken.includes(cName);
-    });
+    // Check if customer exists in current loaded list (supports English <-> Hindi bilingual matching)
+    const existingCust = findEquivalentCustomer(tx.customer_name, customers) ||
+      customers.find(c => {
+        const cName = c.name.toLowerCase().trim();
+        const cleanSpoken = tx.customer_name.toLowerCase().trim();
+        return cName === cleanSpoken || cName.includes(cleanSpoken) || cleanSpoken.includes(cName);
+      });
 
     const res = await fetch('/api/transactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         customer_id: existingCust ? existingCust.id : undefined,
-        customer_name: tx.customer_name,
+        customer_name: existingCust ? existingCust.name : tx.customer_name,
         type: tx.type,
         amount: tx.amount,
         notes: tx.notes,
@@ -710,10 +712,19 @@ export default function App() {
     unit: string;
     stock_quantity: number;
   }) => {
+    // Check if product exists in database in English or Hindi
+    const existingProd = findEquivalentProduct(prod.name, products);
+    const prodNameToSave = existingProd ? existingProd.name : prod.name;
+
     const res = await fetch('/api/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...prod, force_upsert: true })
+      body: JSON.stringify({
+        ...prod,
+        id: existingProd ? existingProd.id : undefined,
+        name: prodNameToSave,
+        force_upsert: true
+      })
     });
     const data = await res.json();
     if (!data.success) {

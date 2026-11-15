@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import os from 'os';
 import { db } from './server/db.js';
+import { areNamesEquivalent } from './src/utils/bilingualMatcher.js';
 
 // Load environment variables from .env
 dotenv.config();
@@ -816,10 +817,10 @@ app.post('/api/transactions', async (req: Request, res: Response) => {
     
     let targetCustomerId = customer_id;
 
-    // If customer_name was given and customer_id is missing, create or find customer
+    // If customer_name was given and customer_id is missing, create or find customer (with English <-> Hindi matching)
     if (!targetCustomerId && customer_name) {
       const customers = await db.getCustomers(shopId);
-      const existing = customers.find(c => c.name.toLowerCase() === customer_name.trim().toLowerCase());
+      const existing = customers.find(c => areNamesEquivalent(c.name, customer_name.trim()));
       if (existing) {
         targetCustomerId = existing.id;
       } else {

@@ -1,4 +1,5 @@
 import { Customer, Product, VoiceParseResult } from '../types';
+import { areNamesEquivalent, findEquivalentCustomer, findEquivalentProduct } from './bilingualMatcher';
 
 export const DEVANAGARI_DIGITS_MAP: Record<string, string> = {
   '०': '0', '१': '1', '२': '2', '३': '3', '४': '4',
@@ -212,29 +213,18 @@ export function parseSpokenDukaanVoice(
       txType = 'udhaar';
     }
 
-    // 3.4 Match or Extract Customer Name
+    // 3.4 Match or Extract Customer Name (with Bilingual English-Hindi matching)
     let matchedCustomer: Customer | undefined = undefined;
 
-    // Priority A: Exact full name match in known customers
-    for (const c of knownCustomers) {
-      const cLower = c.name.toLowerCase().trim();
-      if (clean.includes(cLower)) {
-        matchedCustomer = c;
-        break;
-      }
-    }
+    // Priority A: Search existing customers by exact or bilingual equivalent name
+    matchedCustomer = findEquivalentCustomer(clean, knownCustomers);
 
     // Priority B: Match First Name (e.g. "Ramesh" for "Ramesh Kumar" or "रमेश" for "रमेश जी")
     if (!matchedCustomer) {
       for (const c of knownCustomers) {
-        const cLower = c.name.toLowerCase().trim();
-        const firstName = cLower.split(/[\s\(\)]+/)[0];
-        if (firstName && firstName.length >= 2) {
-          const reg = new RegExp(`\\b${firstName}\\b`, 'i');
-          if (reg.test(clean) || clean.includes(firstName)) {
-            matchedCustomer = c;
-            break;
-          }
+        if (areNamesEquivalent(c.name, clean)) {
+          matchedCustomer = c;
+          break;
         }
       }
     }
@@ -249,7 +239,7 @@ export function parseSpokenDukaanVoice(
 
     let customerName = matchedCustomer ? matchedCustomer.name : '';
 
-    // If new customer, extract candidate name from speech
+    // If customerName not yet determined, extract candidate name from speech
     if (!customerName) {
       // Pattern 1: English preposition: "to <name>", "for <name>", "from <name>", "by <name>"
       const engPrep = clean.match(/(?:to|for|from|by)\s+([a-zA-Z\u0900-\u097F]+(?:\s+[a-zA-Z\u0900-\u097F]+)?)/i);
@@ -276,6 +266,15 @@ export function parseSpokenDukaanVoice(
         const beforeAction = normalizedText.split(/(?:\s+को|\s+ने|\s+से|\s+udhar|\s+udhaar|\s+jama|\s+जमा|\s+उधार|\s+\d+)/i)[0].trim();
         if (beforeAction && beforeAction.length >= 2 && !/^(bolkar|voice|add|likh|likho|entry|namaste|hello)$/i.test(beforeAction)) {
           customerName = isEn ? capitalizeWords(beforeAction) : beforeAction;
+        }
+      }
+
+      // Check if extracted candidate matches any known customer in other language
+      if (customerName) {
+        const found = findEquivalentCustomer(customerName, knownCustomers);
+        if (found) {
+          matchedCustomer = found;
+          customerName = found.name;
         }
       }
 
@@ -376,11 +375,14 @@ export function parseSpokenDukaanVoice(
     }
   }
 
-  // Check known product match from database
-  const matchedProd = knownProducts.find(p => {
-    const pName = p.name.toLowerCase().trim();
-    return clean.includes(pName) || pName.split(/[\s\(\)]+/).some(t => t.length >= 3 && clean.includes(t));
-  });
+  // Check known product match from database (with Bilingual English-Hindi matching)
+  let matchedProd = findEquivalentProduct(clean, knownProducts);
+  if (!matchedProd) {
+    matchedProd = knownProducts.find(p => {
+      const pName = p.name.toLowerCase().trim();
+      return clean.includes(pName) || pName.split(/[\s\(\)]+/).some(t => t.length >= 3 && clean.includes(t));
+    });
+  }
 
   if (matchedProd) {
     if (purchasePrice === 0) purchasePrice = Number(matchedProd.purchase_price) || 0;

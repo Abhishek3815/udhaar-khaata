@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Phone, MapPin, Check, AlertTriangle, Sparkles, Calendar, Clock } from 'lucide-react';
 import { Customer } from '../types';
+import { areNamesEquivalent, findEquivalentCustomer } from '../utils/bilingualMatcher';
 
 interface AddCustomerModalProps {
   isOpen: boolean;
@@ -28,13 +29,14 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Check if someone with same name already exists
+  // Check if someone with same name already exists (supports English <-> Hindi matching)
   const cleanName = name.trim();
   const cleanPhone = phone.replace(/[^0-9]/g, '');
 
-  const matchedNameDuplicate = existingCustomers?.find(
-    c => c.name.trim().toLowerCase() === cleanName.toLowerCase() && cleanName.length > 1
-  );
+  const matchedNameDuplicate = cleanName.length > 1
+    ? (findEquivalentCustomer(cleanName, existingCustomers || []) ||
+       existingCustomers?.find(c => areNamesEquivalent(c.name, cleanName)))
+    : null;
 
   const matchedPhoneDuplicate = cleanPhone.length >= 10
     ? existingCustomers?.find(c => (c.phone || '').replace(/[^0-9]/g, '') === cleanPhone)
