@@ -279,8 +279,9 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           setEditNotes(resultData.notes || (resultData.type === 'udhaar' ? 'उधार माल' : 'जमा राशि'));
           setEditCreditPeriodDays(resultData.creditPeriodDays || resultData.customer?.credit_period_days || 15);
 
-          // ⚡ Start 2-second Auto-Save Countdown if amount is recognized
-          if (autoSaveEnabled && Number(amt) > 0) {
+          // ⚡ Start 2-second Auto-Save Countdown only if single unambiguous match
+          const hasMultipleCustomers = resultData.candidateCustomers && resultData.candidateCustomers.length > 1;
+          if (autoSaveEnabled && Number(amt) > 0 && !hasMultipleCustomers) {
             setCountdown(2);
             countdownTimerRef.current = setInterval(() => {
               setCountdown(prev => {
@@ -303,8 +304,9 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
           setEditQuantity(resultData.quantity ? String(resultData.quantity) : '10');
           setEditUnit(resultData.unit || 'पैकेट');
 
-          // ⚡ Start 2-second Auto-Save Countdown for product
-          if (autoSaveEnabled && pName && pName !== 'नया सामान') {
+          // ⚡ Start 2-second Auto-Save Countdown only if single unambiguous match
+          const hasMultipleProducts = resultData.candidateProducts && resultData.candidateProducts.length > 1;
+          if (autoSaveEnabled && pName && pName !== 'नया सामान' && !hasMultipleProducts) {
             setCountdown(2);
             countdownTimerRef.current = setInterval(() => {
               setCountdown(prev => {
@@ -785,6 +787,48 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
               {parsedData.intent === 'transaction' ? (
                 <div className="space-y-3">
+                  {/* 👥 Multiple Matching Customers Disambiguation Card */}
+                  {parsedData.candidateCustomers && parsedData.candidateCustomers.length > 1 && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between text-xs font-black text-amber-950 dark:text-amber-200">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-base">👥</span>
+                          <span>{isEn ? `Found ${parsedData.candidateCustomers.length} customers with this name. Select correct customer:` : `इस नाम के ${parsedData.candidateCustomers.length} ग्राहक मिले (सही ग्राहक चुनें):`}</span>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {parsedData.candidateCustomers.map((c) => {
+                          const isSelected = editCustomerName.trim().toLowerCase() === c.name.trim().toLowerCase();
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                clearAutoSaveCountdown();
+                                setEditCustomerName(c.name);
+                                setParsedData(prev => prev ? { ...prev, customerId: c.id, customer: c } : null);
+                              }}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-amber-200 dark:border-slate-700 hover:border-emerald-400'
+                              }`}
+                            >
+                              <div className="font-extrabold text-xs flex items-center justify-between">
+                                <span>{c.name}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                              </div>
+                              <div className={`text-[11px] flex items-center gap-2 mt-0.5 ${isSelected ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                                {c.phone && <span>📱 {c.phone}</span>}
+                                {c.address && <span>📍 {c.address}</span>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Customer Name (Editable) */}
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
@@ -980,6 +1024,50 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                 </div>
               ) : parsedData.intent === 'product' ? (
                 <div className="space-y-3">
+                  {/* 📦 Multiple Matching Product Variants Disambiguation Card */}
+                  {parsedData.candidateProducts && parsedData.candidateProducts.length > 1 && (
+                    <div className="p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-300 dark:border-teal-700/80 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between text-xs font-black text-teal-950 dark:text-teal-200">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-base">📦</span>
+                          <span>{isEn ? `Found ${parsedData.candidateProducts.length} matching variants. Select one:` : `इस नाम के ${parsedData.candidateProducts.length} सामान/वेरिएंट मिले (सही चुनें):`}</span>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {parsedData.candidateProducts.map((p) => {
+                          const isSelected = editProductName.trim().toLowerCase() === p.name.trim().toLowerCase();
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                clearAutoSaveCountdown();
+                                setEditProductName(p.name);
+                                setEditUnit(p.unit || 'पैकेट');
+                                if (p.purchase_price) setEditPurchasePrice(String(p.purchase_price));
+                                if (p.selling_price) setEditSellingPrice(String(p.selling_price));
+                              }}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-teal-700 text-white border-teal-800 shadow-xs'
+                                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-teal-200 dark:border-slate-700 hover:border-teal-400'
+                              }`}
+                            >
+                              <div className="font-extrabold text-xs flex items-center justify-between">
+                                <span>{p.name}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                              </div>
+                              <div className={`text-[11px] flex items-center justify-between mt-0.5 ${isSelected ? 'text-teal-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                                <span>₹{p.selling_price} / {p.unit}</span>
+                                <span>स्टॉक: {p.stock_quantity || 0}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Product Name (Editable) */}
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">

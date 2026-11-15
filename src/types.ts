@@ -138,4 +138,6 @@ export interface VoiceParseResult {
   rawText?: string;
   suggestion?: string;
   customer?: Customer;
+  candidateCustomers?: Customer[];
+  candidateProducts?: Product[];
 }

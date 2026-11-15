@@ -1,5 +1,5 @@
 import { Customer, Product, VoiceParseResult } from '../types';
-import { areNamesEquivalent, findEquivalentCustomer, findEquivalentProduct } from './bilingualMatcher';
+import { areNamesEquivalent, findEquivalentCustomer, findEquivalentProduct, findMatchingCustomers, findMatchingProducts } from './bilingualMatcher';
 
 export const DEVANAGARI_DIGITS_MAP: Record<string, string> = {
   '०': '0', '१': '1', '२': '2', '३': '3', '४': '4',
@@ -176,17 +176,13 @@ export function parseSpokenDukaanVoice(
   const hasInventoryExplicitKeywords = /(खरीद|kharid|purchase|cost|बिक्री|bikri|selling|mrp|एमआरपी|थोक भाव|थोक रेट|बिक्री रेट|स्टॉक में जोड़ो|स्टॉक जोड़ो|स्टॉक बढ़ाओ|स्टॉक करो|add to stock|add stock|update stock|नया प्रोडक्ट|नया सामान)/i.test(clean);
   const hasStockActionOnly = /(स्टॉक|stock)/i.test(clean) && !hasUdhaarKeywords && !hasJamaKeywords;
 
-  // Check if speech matches any known product name
-  const matchedExistingProd = findEquivalentProduct(clean, knownProducts) || knownProducts.find(p => {
-    const pName = p.name.toLowerCase().trim();
-    return clean.includes(pName) || pName.split(/[\s\(\)]+/).some(t => t.length >= 3 && clean.includes(t));
-  });
+  // Check if speech matches any known product name (detecting duplicates / multiple variants)
+  const candidateProducts = findMatchingProducts(clean, knownProducts);
+  const matchedExistingProd = candidateProducts[0];
 
-  // Check if speech matches any known customer name
-  const matchedExistingCust = findEquivalentCustomer(clean, knownCustomers) || knownCustomers.find(c => {
-    const cName = c.name.toLowerCase().trim();
-    return clean.includes(cName) || areNamesEquivalent(c.name, clean);
-  });
+  // Check if speech matches any known customer name (detecting duplicates / identical names)
+  const candidateCustomers = findMatchingCustomers(clean, knownCustomers);
+  const matchedExistingCust = candidateCustomers[0];
 
   // Intent decision:
   // If user mentions customer OR Udhaar/Jama OR there's no explicit product keyword, treat as TRANSACTION
@@ -360,6 +356,7 @@ export function parseSpokenDukaanVoice(
       customerName,
       customerId: matchedCustomer ? matchedCustomer.id : undefined,
       customer: matchedCustomer,
+      candidateCustomers: candidateCustomers.length > 1 ? candidateCustomers : undefined,
       type: txType,
       amount,
       creditPeriodDays: txType === 'udhaar' ? creditPeriodDays : undefined,
@@ -422,7 +419,9 @@ export function parseSpokenDukaanVoice(
   }
 
   // Check known product match from database (with Bilingual English-Hindi matching)
-  let matchedProd = matchedExistingProd;
+  // If multiple variants exist, try to match by spoken unit (e.g. 1L pouch vs 15L tin)
+  const unitMatches = candidateProducts.filter(p => p.unit && clean.includes(p.unit.toLowerCase()));
+  let matchedProd = unitMatches.length > 0 ? unitMatches[0] : matchedExistingProd;
 
   if (matchedProd) {
     if (purchasePrice === 0) purchasePrice = Number(matchedProd.purchase_price) || 0;
@@ -487,6 +486,7 @@ export function parseSpokenDukaanVoice(
     purchasePrice,
     sellingPrice,
     quantity,
+    candidateProducts: candidateProducts.length > 1 ? candidateProducts : undefined,
     confidence: 0.98,
     confirmationSpeech: confirmProductSpeech
   };

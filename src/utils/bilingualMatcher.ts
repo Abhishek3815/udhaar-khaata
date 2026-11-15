@@ -184,3 +184,111 @@ export function findEquivalentProduct(queryName: string, products: Product[]): P
   // 2. Bilingual equivalence match
   return products.find(p => areNamesEquivalent(p.name, trimmed));
 }
+
+/**
+ * Returns all matching customers for a spoken name or phrase.
+ * If 2 customers share the name (e.g. Ramesh Sharma & Ramesh Verma, or identical names),
+ * both will be returned so the UI can let the shopkeeper pick the right one.
+ */
+export function findMatchingCustomers(queryOrSpeech: string, customers: Customer[]): Customer[] {
+  if (!queryOrSpeech || !customers || customers.length === 0) return [];
+  const clean = queryOrSpeech.toLowerCase().trim();
+  if (!clean) return [];
+
+  const matched: Customer[] = [];
+  const seenIds = new Set<number>();
+
+  for (const c of customers) {
+    const cName = c.name.toLowerCase().trim();
+    // 1. Exact match or includes full name
+    if (clean.includes(cName) || cName.includes(clean)) {
+      if (!seenIds.has(c.id)) {
+        seenIds.add(c.id);
+        matched.push(c);
+      }
+      continue;
+    }
+
+    // 2. Bilingual equivalence
+    if (areNamesEquivalent(c.name, clean)) {
+      if (!seenIds.has(c.id)) {
+        seenIds.add(c.id);
+        matched.push(c);
+      }
+      continue;
+    }
+
+    // 3. Match by phone digits if spoken (last 4-10 digits)
+    const phoneDigits = (c.phone || '').replace(/\D/g, '');
+    const speechDigits = clean.replace(/\D/g, '');
+    if (phoneDigits.length >= 4 && speechDigits.length >= 4 && (speechDigits.includes(phoneDigits) || speechDigits.includes(phoneDigits.slice(-4)))) {
+      if (!seenIds.has(c.id)) {
+        seenIds.add(c.id);
+        matched.push(c);
+      }
+      continue;
+    }
+
+    // 4. Match by individual tokens (e.g. first name "Ramesh" for "Ramesh Kumar")
+    const tokens = cName.split(/[\s,.-]+/).filter(t => t.length >= 3);
+    for (const t of tokens) {
+      if (clean.includes(t) || areNamesEquivalent(t, clean)) {
+        if (!seenIds.has(c.id)) {
+          seenIds.add(c.id);
+          matched.push(c);
+        }
+        break;
+      }
+    }
+  }
+
+  return matched;
+}
+
+/**
+ * Returns all matching products for a spoken name or query.
+ * Useful when store has multiple variants (e.g. Maggi 70g vs Maggi 280g, Fortune Oil 1L vs 15L).
+ */
+export function findMatchingProducts(queryOrSpeech: string, products: Product[]): Product[] {
+  if (!queryOrSpeech || !products || products.length === 0) return [];
+  const clean = queryOrSpeech.toLowerCase().trim();
+  if (!clean) return [];
+
+  const matched: Product[] = [];
+  const seenIds = new Set<number>();
+
+  for (const p of products) {
+    const pName = p.name.toLowerCase().trim();
+    // 1. Exact match or includes name
+    if (clean.includes(pName) || pName.includes(clean)) {
+      if (!seenIds.has(p.id)) {
+        seenIds.add(p.id);
+        matched.push(p);
+      }
+      continue;
+    }
+
+    // 2. Bilingual equivalence
+    if (areNamesEquivalent(p.name, clean)) {
+      if (!seenIds.has(p.id)) {
+        seenIds.add(p.id);
+        matched.push(p);
+      }
+      continue;
+    }
+
+    // 3. Token match (e.g. "फॉर्च्यून" in "फॉर्च्यून तेल")
+    const tokens = pName.split(/[\s,.-]+/).filter(t => t.length >= 3);
+    for (const t of tokens) {
+      if (clean.includes(t) || areNamesEquivalent(t, clean)) {
+        if (!seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          matched.push(p);
+        }
+        break;
+      }
+    }
+  }
+
+  return matched;
+}
