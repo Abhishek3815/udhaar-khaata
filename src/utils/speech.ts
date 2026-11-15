@@ -364,9 +364,17 @@ export const playPaytmSoundboxChime = async (): Promise<void> => {
 };
 
 // Dukaan Soundbox Voice Speaker (Paytm / PhonePe style) with onEnd callback support
+let activeSourceNode: AudioBufferSourceNode | null = null;
 let currentSoundboxAudio: HTMLAudioElement | null = null;
 
 export const stopCurrentSoundboxVoice = () => {
+  if (activeSourceNode) {
+    try {
+      activeSourceNode.stop();
+      activeSourceNode.disconnect();
+    } catch {}
+    activeSourceNode = null;
+  }
   if (currentSoundboxAudio) {
     try {
       currentSoundboxAudio.pause();
@@ -521,14 +529,9 @@ export const playSoundboxVoice = async (
   stopCurrentSoundboxVoice();
 
   try {
-    // 1. Play authentic Paytm Soundbox Chime first unless explicitly disabled
-    if (!options?.skipChime) {
-      await playPaytmSoundboxChime();
-    }
-
     const isEnText = !/[\u0900-\u097F]/.test(text) && /^[a-zA-Z0-9\s.,₹!?'"-]+$/.test(text);
 
-    // 2. Clean & convert currency/numbers into natural spoken Hindi/English words
+    // 1. Clean & convert currency/numbers into natural spoken Hindi/English words
     let cleanText = text;
     if (isEnText) {
       cleanText = cleanText
@@ -552,14 +555,73 @@ export const playSoundboxVoice = async (
         .trim();
     }
 
-    // 3. Play Natural Studio Human Voice Audio (Cached MP3 via Backend proxy /api/tts)
-    const playNaturalStudioAudio = (): Promise<boolean> => {
+    // 2. Play authentic Paytm Soundbox Chime first unless explicitly disabled
+    const ctx = getSharedAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {}
+    }
+
+    if (!options?.skipChime) {
+      await playPaytmSoundboxChime();
+    }
+
+    const langParam = isEnText ? 'en' : 'hi';
+    const ttsUrl = `/api/tts?lang=${langParam}&text=${encodeURIComponent(cleanText)}`;
+
+    // 3. Method A: Play Natural Studio Human Voice MP3 via Web Audio API (Loud, zero autoplay block)
+    const playViaWebAudio = async (): Promise<boolean> => {
+      if (!ctx) return false;
+      try {
+        const resp = await fetch(ttsUrl);
+        if (!resp.ok) return false;
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('audio') && !contentType.includes('mpeg') && !contentType.includes('octet-stream')) {
+          return false;
+        }
+
+        const arrayBuf = await resp.arrayBuffer();
+        if (!arrayBuf || arrayBuf.byteLength < 500) return false;
+
+        const audioBuf = await ctx.decodeAudioData(arrayBuf);
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuf;
+
+        // Soundbox acoustic resonance and volume boost for authentic Paytm clarity
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(1.25, ctx.currentTime);
+
+        source.connect(gain);
+        gain.connect(ctx.destination);
+
+        activeSourceNode = source;
+        source.onended = () => {
+          if (activeSourceNode === source) {
+            activeSourceNode = null;
+          }
+          if (typeof onEnd === 'function') {
+            try {
+              onEnd();
+            } catch {}
+          }
+        };
+
+        source.start(0);
+        return true;
+      } catch (err) {
+        console.warn('[Soundbox] WebAudio decode error:', err);
+        return false;
+      }
+    };
+
+    // 4. Method B: Fallback to HTML5 Audio Element
+    const playViaAudioElement = (): Promise<boolean> => {
       return new Promise((resolve) => {
         try {
-          const langParam = isEnText ? 'en' : 'hi';
-          const ttsUrl = `/api/tts?lang=${langParam}&text=${encodeURIComponent(cleanText)}`;
           const audio = new Audio(ttsUrl);
           currentSoundboxAudio = audio;
+          audio.volume = 1.0;
 
           let resolved = false;
           const markDone = (success: boolean) => {
@@ -569,7 +631,9 @@ export const playSoundboxVoice = async (
               currentSoundboxAudio = null;
             }
             if (success && typeof onEnd === 'function') {
-              try { onEnd(); } catch {}
+              try {
+                onEnd();
+              } catch {}
             }
             resolve(success);
           };
@@ -577,11 +641,8 @@ export const playSoundboxVoice = async (
           audio.onended = () => markDone(true);
           audio.onerror = () => markDone(false);
 
-          // Safety timeout in case audio takes too long or network stalls
           setTimeout(() => {
-            if (!resolved) {
-              markDone(false);
-            }
+            if (!resolved) markDone(false);
           }, 8000);
 
           audio.play().catch(() => markDone(false));
@@ -591,12 +652,17 @@ export const playSoundboxVoice = async (
       });
     };
 
-    const playedStudioVoice = await playNaturalStudioAudio();
-    if (playedStudioVoice) {
+    const playedViaWebAudio = await playViaWebAudio();
+    if (playedViaWebAudio) {
       return;
     }
 
-    // 4. Graceful Fallback: Local SpeechSynthesis if offline or /api/tts fails
+    const playedViaAudioEl = await playViaAudioElement();
+    if (playedViaAudioEl) {
+      return;
+    }
+
+    // 5. Final Fallback: Local SpeechSynthesis if offline or server TTS unreachable
     speakWithBrowserSpeechSynthesis(cleanText, isEnText, onEnd);
   } catch (err) {
     console.warn('[Soundbox] Voice playback error:', err);
