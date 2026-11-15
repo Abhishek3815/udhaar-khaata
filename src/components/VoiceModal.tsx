@@ -10,7 +10,7 @@ import { useLanguage } from '../context/LanguageContext';
 interface VoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveTransaction: (tx: { customer_name: string; type: 'udhaar' | 'jama'; amount: number; notes: string; bill_image?: string; credit_period_days?: number }) => Promise<void>;
+  onSaveTransaction: (tx: { customer_id?: number; customer_name: string; type: 'udhaar' | 'jama'; amount: number; notes: string; bill_image?: string; credit_period_days?: number }) => Promise<void>;
   onSaveProduct: (prod: { name: string; purchase_price: number; selling_price: number; unit: string; stock_quantity: number }) => Promise<void>;
   soundboxEnabled: boolean;
   onOpenMandiAlert?: (prefill?: any) => void;
@@ -385,6 +385,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
         }
 
         await onSaveTransaction({
+          customer_id: parsedData.customerId,
           customer_name: cName,
           type,
           amount,
@@ -889,6 +890,48 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
                 )}
               </div>
 
+              {/* 👥 Multiple Matching Customers Disambiguation Card (Prominently visible) */}
+              {parsedData.candidateCustomers && parsedData.candidateCustomers.length > 1 && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2 animate-in zoom-in-95">
+                  <div className="flex items-center justify-between text-xs font-black text-amber-950 dark:text-amber-200">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-base">👥</span>
+                      <span>{isEn ? `Found ${parsedData.candidateCustomers.length} customers with this name. Tap to select:` : `इस नाम के ${parsedData.candidateCustomers.length} ग्राहक मिले (कृपया सही ग्राहक चुनें):`}</span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {parsedData.candidateCustomers.map((c) => {
+                      const isSelected = parsedData.customerId ? parsedData.customerId === c.id : editCustomerName.trim().toLowerCase() === c.name.trim().toLowerCase();
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            clearAutoSaveCountdown();
+                            setEditCustomerName(c.name);
+                            setParsedData(prev => prev ? { ...prev, customerId: c.id, customer: c } : null);
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs ring-2 ring-emerald-300'
+                              : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-amber-200 dark:border-slate-700 hover:border-emerald-400'
+                          }`}
+                        >
+                          <div className="font-extrabold text-xs flex items-center justify-between">
+                            <span>{c.name}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                          </div>
+                          <div className={`text-[11px] flex items-center gap-2 mt-0.5 ${isSelected ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {c.phone && <span>📱 {c.phone}</span>}
+                            {c.address && <span>📍 {c.address}</span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* 3. Detailed Editing Form (Visible when user taps 'बदलें / सुधारें') */}
               {showAdvancedEdit && (
                 <div className="p-3.5 rounded-2xl bg-slate-200/60 dark:bg-slate-900/60 border border-slate-300 dark:border-slate-700 space-y-3 animate-in fade-in duration-150">
@@ -942,47 +985,6 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
               {parsedData.intent === 'transaction' ? (
                 <div className="space-y-3">
-                  {/* 👥 Multiple Matching Customers Disambiguation Card */}
-                  {parsedData.candidateCustomers && parsedData.candidateCustomers.length > 1 && (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-2">
-                      <div className="flex items-center justify-between text-xs font-black text-amber-950 dark:text-amber-200">
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-base">👥</span>
-                          <span>{isEn ? `Found ${parsedData.candidateCustomers.length} customers with this name. Select correct customer:` : `इस नाम के ${parsedData.candidateCustomers.length} ग्राहक मिले (सही ग्राहक चुनें):`}</span>
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {parsedData.candidateCustomers.map((c) => {
-                          const isSelected = editCustomerName.trim().toLowerCase() === c.name.trim().toLowerCase();
-                          return (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => {
-                                clearAutoSaveCountdown();
-                                setEditCustomerName(c.name);
-                                setParsedData(prev => prev ? { ...prev, customerId: c.id, customer: c } : null);
-                              }}
-                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                                isSelected
-                                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
-                                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-amber-200 dark:border-slate-700 hover:border-emerald-400'
-                              }`}
-                            >
-                              <div className="font-extrabold text-xs flex items-center justify-between">
-                                <span>{c.name}</span>
-                                {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
-                              </div>
-                              <div className={`text-[11px] flex items-center gap-2 mt-0.5 ${isSelected ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                                {c.phone && <span>📱 {c.phone}</span>}
-                                {c.address && <span>📍 {c.address}</span>}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Customer Name (Editable) */}
                   <div>

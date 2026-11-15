@@ -648,6 +648,7 @@ export default function App() {
 
   // Voice transaction & product handlers
   const handleSaveVoiceTransaction = async (tx: {
+    customer_id?: number;
     customer_name: string;
     type: 'udhaar' | 'jama';
     amount: number;
@@ -663,13 +664,16 @@ export default function App() {
       calculatedDueDate = d.toISOString().split('T')[0];
     }
 
-    // Check if customer exists in current loaded list (supports English <-> Hindi bilingual matching)
-    const existingCust = findEquivalentCustomer(tx.customer_name, customers) ||
-      customers.find(c => {
-        const cName = c.name.toLowerCase().trim();
-        const cleanSpoken = tx.customer_name.toLowerCase().trim();
-        return cName === cleanSpoken || cName.includes(cleanSpoken) || cleanSpoken.includes(cName);
-      });
+    // Check if customer exists: prioritize explicit disambiguated customer_id if shopkeeper picked one
+    let existingCust = tx.customer_id ? customers.find(c => c.id === tx.customer_id) : undefined;
+    if (!existingCust) {
+      existingCust = findEquivalentCustomer(tx.customer_name, customers) ||
+        customers.find(c => {
+          const cName = c.name.toLowerCase().trim();
+          const cleanSpoken = tx.customer_name.toLowerCase().trim();
+          return cName === cleanSpoken || cName.includes(cleanSpoken) || cleanSpoken.includes(cName);
+        });
+    }
 
     const res = await fetch('/api/transactions', {
       method: 'POST',
